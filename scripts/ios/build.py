@@ -562,6 +562,18 @@ def main() -> int:
         build_renderer(toolchain, artifacts, args.skip_renderer, args.verbose)
         run_xcodegen(toolchain, artifacts, args.verbose)
         app = build_app(toolchain, artifacts, args.verbose)
+        # Legal notices are actual source texts, not a list of license names.
+        # Generate after SPM resolves so ZIPFoundation's exact checkout is present.
+        deps_cache = Path(os.environ.get("WM_IOS_DEPS_CACHE", ROOT / "Renderer/Engine/.ios-deps"))
+        run_logged(
+            [sys.executable, str(SCRIPT_DIR / "notices.py"),
+             "--deps-sources", str(deps_cache / "src"),
+             "--deps-downloads", str(deps_cache / "downloads"),
+             "--zipfoundation", str(DERIVED_DATA / "SourcePackages/checkouts/ZIPFoundation"),
+             "--output", str(app / "Licenses")],
+            artifacts / "license-notices.log", os.environ.copy(),
+            "Bundle source licenses and upstream attribution", args.verbose,
+        )
     except BuildError as error:
         print(f"{MARK.missing} build failed: {error}", flush=True)
         return 1

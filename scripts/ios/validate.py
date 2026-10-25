@@ -75,6 +75,7 @@ ALLOWED_FRAMEWORKS = frozenset(
         "CoreServices",
         "CoreText",
         "CoreVideo",
+        "CryptoKit",
         "GameController",
         "ImageIO",
         "IOSurface",

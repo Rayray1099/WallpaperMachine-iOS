@@ -205,6 +205,20 @@ class RealValidatorStructuralChecks(unittest.TestCase):
         self.module.check_executable(report, executable, MINIMUM_OS, None)
         self.assertTrue(any(name == "macho.minimum_os" for name, _detail in self.failures(report)))
 
+    def test_cryptokit_is_allowed_only_as_a_system_sdk_framework(self):
+        from types import SimpleNamespace
+        info = SimpleNamespace(dylibs=["/System/Library/Frameworks/CryptoKit.framework/CryptoKit"])
+        sdk = self.directory / "iPhoneOS.sdk"
+        framework = sdk / "System/Library/Frameworks/CryptoKit.framework"
+        framework.mkdir(parents=True)
+        (framework / "CryptoKit.tbd").write_text("fixture", encoding="utf-8")
+        problems, frameworks, _libraries = self.module.load_command_problems(info, sdk)
+        self.assertEqual(problems, [])
+        self.assertEqual(frameworks, 1)
+        info.dylibs = ["/opt/homebrew/lib/CryptoKit.dylib"]
+        problems, _frameworks, _libraries = self.module.load_command_problems(info, sdk)
+        self.assertTrue(problems, "allowing an iOS SDK framework must not permit host dylibs")
+
     def test_check_executable_rejects_non_pie(self):
         app, executable, _ipa = self.app_and_ipa(app_options={"pie": False})
         report = self.report()

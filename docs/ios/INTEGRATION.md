@@ -39,7 +39,7 @@ The device build uses SDK `iphoneos`, deployment floor 18.0, architecture `arm64
 
 We integrate Rust `wm-shader` + the real C++ engine C ABI, **not** unmodified macOS-only Rust Core/Bridge with AppKit/ServiceManagement. No generated UniFFI WallpaperBridge files are required.
 
-System frameworks only; no Homebrew macOS binaries in the IPA. All iOS/Sources files share one Swift 5 module. Resources include English and Traditional Chinese, with microphone purpose text. Unit and UI tests have separate XcodeGen targets; simulator testing requires its own simulator renderer objects and is not established by a device archive build. Lead alone commits/pushes/triggers.
+System frameworks only; no Homebrew macOS binaries in the IPA. All iOS/Sources files share one Swift 5 module. Resources include English and Traditional Chinese, with microphone purpose text. After successful Xcode compilation, the build bundles actual source license texts under `Licenses/`: upstream GPL/history/provenance, pinned native dependencies, ZIPFoundation's resolved checkout, and the target-specific normal dependency closure of wm-shader. Missing required text fails the build; this notice payload is not a substitute for GPL corresponding-source obligations. Unit and UI tests have separate XcodeGen targets; simulator testing requires its own simulator renderer objects and is not established by a device archive build. Lead alone commits/pushes/triggers.
 
 ## Workshop
 

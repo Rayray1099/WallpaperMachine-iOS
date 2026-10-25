@@ -77,6 +77,8 @@ NLOHMANN_SHA256="aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de6
 NLOHMANN_URL="https://github.com/nlohmann/json/releases/download/v${NLOHMANN_VERSION}/json.hpp"
 NLOHMANN_FWD_SHA256="fb6aa70cbece087f37ab4685c182b287c53be54f785f981b9db9d30d2d028b37"
 NLOHMANN_FWD_URL="https://github.com/nlohmann/json/releases/download/v${NLOHMANN_VERSION}/json_fwd.hpp"
+NLOHMANN_LICENSE_SHA256="46a65cffd1ea955132d95a8dd921640714a8d6b537d2e4e482d31145ae95b603"
+NLOHMANN_LICENSE_URL="https://raw.githubusercontent.com/nlohmann/json/v${NLOHMANN_VERSION}/LICENSE.MIT"
 
 ARGPARSE_VERSION="3.2"
 ARGPARSE_TAG="v${ARGPARSE_VERSION}"
@@ -511,6 +513,7 @@ if [ "${BUILD_DEPS}" = "true" ]; then
   download "${LZ4_URL}" "lz4-${LZ4_VERSION}.tar.gz" "${LZ4_SHA256}"
   download "${NLOHMANN_URL}" "json.hpp" "${NLOHMANN_SHA256}"
   download "${NLOHMANN_FWD_URL}" "json_fwd.hpp" "${NLOHMANN_FWD_SHA256}"
+  download "${NLOHMANN_LICENSE_URL}" "nlohmann-json-LICENSE.MIT" "${NLOHMANN_LICENSE_SHA256}"
   download "${ARGPARSE_URL}" "argparse-${ARGPARSE_VERSION}.tar.gz" "${ARGPARSE_SHA256}"
 
   extract_if_needed "${DEPS_DOWNLOADS}/quickjs-${QUICKJS_VERSION}.tar.gz" "${QUICKJS_DIR}"
