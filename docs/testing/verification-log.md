@@ -25,6 +25,19 @@ and moves whatever falls past ten verbatim into a monthly file under
 [archive/](archive/); promote anything durable before it goes. Editing an
 entry's recorded result is not allowed.
 
+## 2026-10-25 — iPad installation, real export and Steam CDN continuation
+
+- Source ff15056f: macOS Actions 40179227438 passed full ARM64 iOS Release native/Swift compilation, notices, packaging and validation; simulator XCTest remains explicitly deferred.
+- Downloaded original IPA independently passed SHA256 34660c81017133025cce99abefc73b3563d85d200c3e2da326958edf708e6212, ZIP CRC/structure, actual native symbols and 541 nonempty legal files.
+- Native Actions 40179227416: actual logs show 3 transport + 13 CDN tests passed, zero doc tests, followed by successful iOS ARM64 optimized compilation.
+- Offline iOS QA: 122 run / 119 passed / 3 pinned-source license-input skips; build --check, 93-file Swift syntax parse, portable export typechecks, 33 provider/timing checks and backup/diagnostics execution passed.
+- Both iOS catalogs have 209 matching keys with clean duplicates/placeholders. Routine scripts/test.py ran once and failed on Windows/Python3.10 compatibility: 25 modules, 17 passed, 8 failed; no upstream native verdict.
+- Installed 95d82eeb on iPadOS27: six cropped screenshots establish changing author animation (6 distinct, 5 transitions, 28.94 percent union coverage), not FPS or engine playback.
+- Physical synthetic H264 source import/export: MP4 60 frames at1080x1920 /377447 bytes; tendies 60 frames /5613260 bytes with834w-1210h@2x~ipad screen class; both actual share sheet.
+- AirCard1.3.2 accepted actual tendies with expected thumbnail/name, Collections format, one descriptor and CollectionsPoster target. No Flash/cache refresh/Respring or OS animation pass claimed.
+- User-supplied dylib local pre-sign copy independently passed byte/ZIP/LLVM checks and 27 injector tests; ff15056f then LCSign signed/installed/opened with prior item preserved. Original CI IPA untouched; no supplied binary committed.
+- Live native login succeeded; old directory schema reproduced fractional weighted_load failure and fixed. New installed retry progresses to chunk_download_failed; no completed content import. Web/HEVC/sequence/long output and native XCTest remain unverified.
+
 ## 2026-10-25 — Final iOS microphone-source build artifact
 
 - Actions40164217807 source9ff8f083: Release native engine+Swift app compile, source notices, unsigned IPA packaging and structural validation PASS.
@@ -113,15 +126,3 @@ macOS 26+ WallpaperAgent keeps a full-size bitmap of every desktop picture file 
 - python3 scripts/test.py: 4016 passed, 0 failed, 46 skipped (after rebuilding the stale renderer library with build.py --renderer-only).
 - Not checked: GitHub's rendering of the form and the URL prefill; it only takes effect once the template is on the default branch.
 - Blank issues stay on for the body-prefilled link of app versions up to 1.6.0; app not rebuilt.
-
-## 2026-10-23 — Web wallpapers: assigning the property listener is not a delivery
-
-A React page that assigns `wallpaperPropertyListener` while it renders (issue #69) looped on the host script's synchronous replay until React error 301 left it blank. The host script now replays only what the page has not taken in, once after the assigning turn, and once more for a listener a handler assigns during that replay. This Mac cannot link the test host, so the native gate runs in CI on the pull request (#72), as agreed on the issue.
-
-- Offscreen `WKWebView` probe with the app's user scripts (no window, no audio) on the reported page: old script → React error 301, 52 listener assignments, empty `#root`; fixed script → full UI, 3 assignments, the player calls `play()`
-- Probe scenarios, old vs fixed: render-time assignment (25+ deliveries and an error vs each value once, one pass per render), replaced listener (whole set vs only changes), late listener with pause (called during the assignment vs once after it), directory replay (resent vs only what is owed), throw-and-reassign (stack overflow vs one call); a handler gained later and a throwing first handler behave as before
-- Review follow-up, the host script run in Node, PR head 5293a5af vs fix: a listener assigned during the replay (general properties never delivered vs once), a restaged file that arrives with no handler (lost vs owed to the next listener); throw-and-reassign still one call, partial take-in plus throw-and-reassign one extra pass; synchronous re-render, replaced and late listener unchanged
-- `swiftc -typecheck` of the shared web wallpaper sources — exit 0; `swiftc -parse` of the two changed test files — exit 0
-- `Tests/Unit/WebWallpaper/` (`WebWallpaperAuthorAPITests`, `WebWallpaperSuspensionTests`) updated and extended; not compiled or run locally
-- Native stage of `python3 scripts/test.py` — not run: no Rust or renderer Homebrew packages here, so the test host does not link; left to CI on the pull request. Python script tests not rerun after rebasing onto f2d6862e (no Python change)
-- Not compared with Wallpaper Engine's frame (VM not used); not checked on the desktop; no Release build

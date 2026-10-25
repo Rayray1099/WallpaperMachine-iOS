@@ -153,6 +153,9 @@ what it checked rather than failing open.
 | `iOS/Tests/Unit/Library/LibraryStoreSecurityTests.swift` | contained URLs, import symlink refusal, backup traversal refusal |
 | `iOS/Tests/Unit/Library/LibraryStorePersistenceTests.swift` | save/reload, favorites/edits, valid backup rejection by generic import with live memory/files preserved, explicit backup replacement round-trip, corrupt/future backups, removal |
 | `iOS/Tests/Unit/Media/MicrophoneCaptureEligibilityTests.swift` | enabled/active/visible capture gate, negative/zero/multiple consumers; no microphone hardware |
+| `iOS/Tests/Unit/Export/LiveCaptureTimingTests.swift` | monotonic pacing, drift/overflow and finite bounded capture dimensions |
+| `iOS/Tests/Unit/Export/WebWallpaperExportProviderTests.swift` | prepare/reuse, retained size, final-frame drift, late wake, invalid/repeated timestamps, cancellation/timeout with late callback, readiness and failed prepare |
+| `iOS/Tests/Unit/Workshop/WorkshopContentDiagnosticsTests.swift` | exact safe-code allowlist, distinct discovery failures, unknown/secret text suppression, explicit/fallback phases |
 | `iOS/Tests/UI/WallpaperMachineIOSUITests.swift` | full `wm.*` contract on launch, settings sheet, item preview/export |
 
 Tests use a unique temporary directory and clean it in teardown; they never touch
