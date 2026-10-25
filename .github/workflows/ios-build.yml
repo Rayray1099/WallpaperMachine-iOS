@@ -98,6 +98,15 @@ jobs:
             "${RUNNER_TEMP}/wm-ios-${harness}" | tee "${IOS_ARTIFACTS}/${harness}.log"
           done
 
+      - name: Test bounded movie decoder diagnostics on macOS
+        run: |
+          set -euo pipefail
+          xcrun swiftc -swift-version 5 -warnings-as-errors -parse-as-library \
+            iOS/Sources/Export/MovieFrameSourceDiagnostics.swift \
+            scripts/ios/test_movie_frame_source_diagnostics.swift \
+            -o "${RUNNER_TEMP}/wm-ios-movie-diagnostics-tests"
+          "${RUNNER_TEMP}/wm-ios-movie-diagnostics-tests" | tee "${IOS_ARTIFACTS}/movie-diagnostics-tests.log"
+
       - name: Build renderer and unsigned app
         run: python3 scripts/ios/build.py --artifacts-dir "${IOS_ARTIFACTS}"
 

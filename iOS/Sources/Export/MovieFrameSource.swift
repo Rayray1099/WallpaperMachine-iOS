@@ -123,7 +123,14 @@ public final class MovieFrameSource {
 
     /// Starts decoding. Called once by the exporter before the first frame.
     public func start() throws {
-        let reader = try AVAssetReader(asset: asset)
+        let reader: AVAssetReader
+        do {
+            reader = try AVAssetReader(asset: asset)
+        } catch {
+            throw MovieFrameSourceError.readerFailed(
+                MovieFrameSourceDiagnostics(stage: .start, readerStatus: nil,
+                                            error: error as NSError).description)
+        }
         let settings: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
             kCVPixelBufferIOSurfacePropertiesKey as String: [:]
@@ -133,7 +140,8 @@ public final class MovieFrameSource {
         guard reader.canAdd(output) else { throw MovieFrameSourceError.readerConfigurationFailed }
         reader.add(output)
         guard reader.startReading() else {
-            throw MovieFrameSourceError.readerFailed(reader.error?.localizedDescription ?? "unknown")
+            throw MovieFrameSourceError.readerFailed(
+                Self.failureDiagnostic(stage: .start, reader: reader))
         }
         self.reader = reader
         self.output = output
@@ -170,11 +178,27 @@ public final class MovieFrameSource {
         lookahead = try readNext()
     }
 
+    private static func failureDiagnostic(stage: MovieFrameSourceDiagnostics.Stage,
+                                          reader: AVAssetReader) -> String {
+        let status: MovieFrameSourceDiagnostics.ReaderStatus
+        switch reader.status {
+        case .unknown: status = .unknown
+        case .reading: status = .reading
+        case .completed: status = .completed
+        case .failed: status = .failed
+        case .cancelled: status = .cancelled
+        @unknown default: status = .unknown
+        }
+        return MovieFrameSourceDiagnostics(stage: stage, readerStatus: status,
+                                           error: reader.error as NSError?).description
+    }
+
     private func readNext() throws -> Sample? {
         guard let output else { return nil }
         guard let sampleBuffer = output.copyNextSampleBuffer() else {
             if let reader, reader.status == .failed {
-                throw MovieFrameSourceError.readerFailed(reader.error?.localizedDescription ?? "unknown")
+                throw MovieFrameSourceError.readerFailed(
+                    Self.failureDiagnostic(stage: .copy, reader: reader))
             }
             return nil
         }
