@@ -178,3 +178,4 @@
 "workshop.preview.playAnimation" = "Play author-provided animation";
 "workshop.preview.stillOnly" = "Still author preview only";
 "export.title" = "Export";
+"library.import.backupRequiresRestore" = "To restore a library backup, use Restore Backup in Settings. Restoring replaces your current library.";

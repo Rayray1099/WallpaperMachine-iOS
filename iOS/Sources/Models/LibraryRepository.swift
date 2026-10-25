@@ -34,7 +34,11 @@ public final class LibraryRepository {
 
     public func importWallpaper(from sourceURL: URL, into original: LibraryManifest) throws -> LibraryManifest {
         let source = sourceURL.standardizedFileURL
-        if source.pathExtension.lowercased() == "wmbackup" { return try restoreBackup(from: source) }
+        // Import is additive. Replacing the library requires the separate,
+        // explicitly confirmed Settings restore flow, even for a valid backup.
+        guard source.pathExtension.lowercased() != "wmbackup" else {
+            throw LibraryError.backupRequiresRestore
+        }
         let granted = ScopedAssetAccess.begin(source)
         defer { if granted { ScopedAssetAccess.end(source) } }
         let temp = fm.temporaryDirectory.appendingPathComponent("wm-import-" + UUID().uuidString, isDirectory: true)

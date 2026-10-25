@@ -92,11 +92,14 @@ public struct LibraryManifest: Codable {
 
 public enum LibraryError: LocalizedError {
     case invalidPath(String), unsupported(String), invalidBackup, missingEntry, tooLarge, symbolicLink
+    case backupRequiresRestore
     public var errorDescription: String? {
         switch self {
         case .invalidPath(let path): return "Unsafe imported asset path: \(path)"
         case .unsupported(let kind): return "Unsupported import: \(kind)"
         case .invalidBackup: return "The backup is invalid or uses an unsupported version."
+        case .backupRequiresRestore:
+            return NSLocalizedString("library.import.backupRequiresRestore", comment: "Use the confirmed Settings restore flow for library backups")
         case .missingEntry: return "The wallpaper entry file was not found."
         case .tooLarge: return "Import exceeds the 20 GB safety limit."
         case .symbolicLink: return "Symbolic links are not allowed in imported wallpaper folders."

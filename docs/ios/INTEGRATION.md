@@ -8,7 +8,7 @@ These are shared implementation contracts, not verification claims. Source, comp
 - Published properties are module-settable as architecture says.
 - `JSONValue` has string/number/bool/array/object/null cases with manual JSON-shaped Codable (not Swift tagged synthesized representation).
 - `update(_ item:)` is nonthrowing, errors through `errorMessage`; `remove(_ item:) throws`.
-- `importURL(_:) async` is nonthrowing, errors through `errorMessage`. It accepts a project folder, video, image, HTML, or `.wmbackup`. Numeric imported folder name initializes workshopID. Importing an existing workshopID replaces its managed asset folder atomically while preserving favorite/collection/property selections.
+- `importURL(_:) async` is nonthrowing, errors through `errorMessage`. It accepts a project folder, ZIP project, video, image or HTML. Generic import rejects `.wmbackup` (case-insensitive) without changing the live library and directs the user to Settings → Restore Backup; only that separately confirmed restore flow replaces the library. Numeric imported folder name initializes workshopID. Importing an existing workshopID replaces its managed asset folder atomically while preserving favorite/collection/property selections.
 - `url(for:)` returns the managed project **folder**, not the entry. UI appends `entryFile` before preview/export.
 - Backups use a versioned directory tree archived as ZIP with `.wmbackup` extension (ZIPFoundation package). No credentials in backups.
 - `save()` persists direct UI settings/playlists/collections mutations atomically.

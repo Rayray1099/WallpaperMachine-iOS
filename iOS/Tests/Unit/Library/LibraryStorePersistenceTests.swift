@@ -58,16 +58,65 @@ final class LibraryStorePersistenceTests: XCTestCase {
         XCTAssertEqual(reloaded.items[0].collections, ["Night", "Rain"])
     }
 
+    func testGenericImportRejectsBackupAndPreservesLiveState() async throws {
+        let sourceRoot = try makeTemporaryDirectory()
+        let source = makeStore(sourceRoot)
+        let backupItem = try seed(source, in: sourceRoot)
+        let backupFolder = try makeTemporaryDirectory()
+        let backup = backupFolder.appendingPathComponent("library.wmbackup")
+        try source.exportBackup(to: backup)
+        let backupData = try Data(contentsOf: backup)
+
+        // The generic picker admits arbitrary data, including mixed-case backup
+        // extensions. A valid archive must not turn an additive import into restore.
+        for fileExtension in ["wmbackup", "WMBACKUP"] {
+            let root = try makeTemporaryDirectory()
+            let store = makeStore(root)
+            let item = try seed(store, in: root)
+            try store.save()
+            let manifestURL = root.appendingPathComponent("library.json")
+            let originalManifest = try Data(contentsOf: manifestURL)
+            let originalSettings = store.settings
+            let entryURL = store.url(for: item).appendingPathComponent(item.entryFile)
+            let originalEntry = try Data(contentsOf: entryURL)
+            let input = backupFolder.appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(fileExtension)
+            try backupData.write(to: input)
+
+            await store.importURL(input)
+
+            XCTAssertNotNil(store.errorMessage)
+            XCTAssertFalse(store.isImporting)
+            XCTAssertEqual(store.items, [item])
+            XCTAssertFalse(store.items.contains { $0.id == backupItem.id })
+            XCTAssertEqual(store.collections, ["Night"])
+            XCTAssertEqual(store.playlistIDs, [item.id])
+            XCTAssertEqual(store.settings, originalSettings)
+            XCTAssertEqual(try Data(contentsOf: manifestURL), originalManifest)
+            XCTAssertEqual(try Data(contentsOf: entryURL), originalEntry)
+            XCTAssertEqual(try Data(contentsOf: input), backupData)
+            let reloaded = makeStore(root)
+            XCTAssertEqual(reloaded.items, [item])
+            XCTAssertEqual(reloaded.collections, ["Night"])
+            XCTAssertEqual(reloaded.playlistIDs, [item.id])
+            XCTAssertEqual(reloaded.settings, originalSettings)
+        }
+    }
+
     func testExportAndRestoreBackupRoundTrip() throws {
         let sourceRoot = try makeTemporaryDirectory()
         let source = makeStore(sourceRoot)
         let item = try seed(source, in: sourceRoot)
-        let backup = try makeTemporaryDirectory().appendingPathComponent("library-backup.json")
+        let backup = try makeTemporaryDirectory().appendingPathComponent("library-backup.wmbackup")
         try source.exportBackup(to: backup)
 
         let restoredRoot = try makeTemporaryDirectory()
         let restored = makeStore(restoredRoot)
+        let replacedItem = try seed(restored, in: restoredRoot)
+        try restored.save()
+        let replacedFolder = restored.url(for: replacedItem)
         try restored.restoreBackup(from: backup)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: replacedFolder.path))
 
         XCTAssertEqual(restored.items.count, 1)
         XCTAssertEqual(restored.items[0].id, item.id)

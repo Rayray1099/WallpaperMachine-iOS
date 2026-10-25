@@ -178,3 +178,4 @@
 "workshop.preview.playAnimation" = "播放作者提供的動態預覽";
 "workshop.preview.stillOnly" = "僅有作者提供的靜態預覽";
 "export.title" = "匯出";
+"library.import.backupRequiresRestore" = "若要還原圖庫備份，請使用「設定」中的「還原備份」。還原會取代目前的圖庫。";
