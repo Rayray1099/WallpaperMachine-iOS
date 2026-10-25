@@ -1,0 +1,127 @@
+# Actual production MovieFrameSource on macOS; generated original media only.
+# No UIKit/app/simulator/device/desktop/audio, fixture downloads, installs or signing.
+name: iOS Movie Reader (native macOS)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios/main]
+    paths:
+      - "iOS/Sources/Export/**"
+      - "scripts/ios/test_movie_frame_source_apple.swift"
+      - "scripts/ios/test_movie_frame_source_diagnostics.swift"
+      - ".github/workflows/ios-movie-reader-test.yml"
+  pull_request:
+    branches: [ios/main]
+    paths:
+      - "iOS/Sources/Export/**"
+      - "scripts/ios/test_movie_frame_source_apple.swift"
+      - "scripts/ios/test_movie_frame_source_diagnostics.swift"
+      - ".github/workflows/ios-movie-reader-test.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-movie-reader-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-movie-reader:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Check out sources without saved credentials
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Select installed stable Xcode without global changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Darwin
+          # Local process selection only; no xcode-select switch or installation.
+          xcode_app="$(python3 -c 'import pathlib,re; apps=[p for p in pathlib.Path("/Applications").glob("Xcode*.app") if re.fullmatch(r"Xcode_\d+(?:\.\d+)*\.app",p.name) and (p/"Contents/Developer").is_dir()]; version=lambda p: tuple(map(int,re.findall(r"\d+",p.name))); print(max(apps,key=version)) if apps else None')"
+          test -n "$xcode_app"
+          export DEVELOPER_DIR="${xcode_app}/Contents/Developer"
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          xcrun swiftc --version
+          # mktemp owns this run's binary/logs/fixtures, never another task's files.
+          movie_dir="$(mktemp -d "${RUNNER_TEMP}/wm-movie-reader.XXXXXXXX")"
+          echo "MOVIE_TEST_DIR=$movie_dir" >> "$GITHUB_ENV"
+          printf 'Source revision: '; git rev-parse HEAD
+          shasum -a 256 iOS/Sources/Export/{MovieFrameSource.swift,MovieFrameSourceDiagnostics.swift,ExportGeometry.swift,WallpaperExportSettings.swift,TendiesScreenClass.swift,TendiesManifest.swift,KeyedArchiveBuilder.swift,ZipArchiveWriter.swift} scripts/ios/test_movie_frame_source_apple.swift
+
+      - name: Compile real production sources (no PixelSize or decoder substitute)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # ExportGeometry owns PixelSize. Its Foundation-only dependency closure
+          # is compiled unchanged too, rather than extracting/copied declarations.
+          xcrun --sdk macosx swiftc -swift-version 5 -parse-as-library -O \
+            -target "$(uname -m)-apple-macosx13.0" \
+            iOS/Sources/Export/ExportGeometry.swift \
+            iOS/Sources/Export/WallpaperExportSettings.swift \
+            iOS/Sources/Export/TendiesScreenClass.swift \
+            iOS/Sources/Export/TendiesManifest.swift \
+            iOS/Sources/Export/KeyedArchiveBuilder.swift \
+            iOS/Sources/Export/ZipArchiveWriter.swift \
+            iOS/Sources/Export/MovieFrameSourceDiagnostics.swift \
+            iOS/Sources/Export/MovieFrameSource.swift \
+            scripts/ios/test_movie_frame_source_apple.swift \
+            -o "$MOVIE_TEST_DIR/movie-reader-test"
+          xcrun --sdk macosx swiftc -swift-version 5 -parse-as-library \
+            iOS/Sources/Export/MovieFrameSourceDiagnostics.swift \
+            scripts/ios/test_movie_frame_source_diagnostics.swift \
+            -o "$MOVIE_TEST_DIR/diagnostics-test"
+          "$MOVIE_TEST_DIR/diagnostics-test"
+
+      - name: Generate bounded fixtures and assert tiny VFR contract first
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$MOVIE_TEST_DIR/movie-reader-test" generate "$MOVIE_TEST_DIR/fixtures" 2>&1 | tee "$MOVIE_TEST_DIR/generate.log"
+
+      - name: Decode all ticks at 10, 30 and 60 fps with plain and pooled callers
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Independent fresh processes preserve a comparable per-case high-water
+          # RSS. Plain caller first: no per-output autoreleasepool may hide a leak.
+          failed=0
+          for mode in 10-plain 30-plain 60-plain 10-pool 30-pool 60-pool; do
+            if /usr/bin/time -l "$MOVIE_TEST_DIR/movie-reader-test" "$mode" "$MOVIE_TEST_DIR/fixtures" 2>&1 | tee "$MOVIE_TEST_DIR/${mode}.log"; then
+              :
+            else
+              failed=1
+            fi
+          done
+          test "$failed" = 0
+          echo 'PASS: actual macOS MovieFrameSource; 240/240 30fps ticks (0...239, last 7.9667s), plus 10/60fps and plain/pool controls.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Each run verifies avc1 Main@5.2, 2160x2160, 60fps, 8.2s before counting; every tick checks a lossy-tolerant 9-bit frame index and moving RGB regions. Per-process maximum RSS is logged for comparison, not a fixed memory threshold.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No iPad, full export/compositor/archive, device failure reproduction or decoder memory-fix claim. This macOS synthetic clip does not establish why the real iPad reader failed.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload synthetic-fixture test logs only
+        if: ${{ always() && env.MOVIE_TEST_DIR != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-movie-reader-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.MOVIE_TEST_DIR }}/*.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Clean only this run's temporary directory
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${MOVIE_TEST_DIR:-}" ]; then
+            # Verify the exact owned absolute location before deletion; no fallback.
+            case "$MOVIE_TEST_DIR" in "$RUNNER_TEMP"/wm-movie-reader.*) ;; *) exit 1 ;; esac
+            test -d "$MOVIE_TEST_DIR" && test ! -L "$MOVIE_TEST_DIR"
+            rm -rf -- "$MOVIE_TEST_DIR"
+          fi
