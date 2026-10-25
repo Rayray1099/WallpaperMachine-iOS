@@ -39,6 +39,28 @@ REQUIRED = {
         "testFailedSecondPublicationRenameRestoresOldDirectory",
         "testSymlinkMountAndParentAreRejected",
     ),
+    "SceneWallpaperExportTests": (
+        "testBGRAAndRGBAAreDecodedByCoreGraphicsWithoutSwappingChannelsOrRows",
+        "testUnrelatedLayerAndContextResponsesAreIgnored",
+        "testSynchronousResponseIsSafeAndEveryCaptureUsesUniqueContext",
+        "testQueuedResponseCannotSurviveSessionInvalidation",
+        "testCancellationEndsPromptlyAndLateResponseCannotAnswerNextRequest",
+        "testTimeoutCleansRequestAndAllowsSubsequentCapture",
+        "testReadinessLossWhileWaitingDoesNotReturnFrame",
+        "testNotReadyAndAlreadyCancelledCallsDoNotPostReadback",
+        "testConcurrentRequestIsRejectedWithoutStealingFirstContinuation",
+        "testMalformedAndOversizedMatchingPayloadsAreRejectedAndReset",
+        "testCaptureBoundsDoNotUpscaleAndRejectUnsafeSurfaceBeforePosting",
+        "testNativeResolutionBudgetDoesNotSilentlyInheritWebLimit",
+        "testProviderUsesLiveNilSourceTimeAndMonotonicPacingAcrossSessions",
+        "testProviderRejectsWrongSourceFakeTimelineAndResolutionMismatch",
+        "testProviderFailsSlowFinalCaptureAndDoesNotLowerFPSOrStayPrepared",
+        "testProviderRejectsLateWakeBeforeAnotherNativeReadback",
+        "testProviderRejectsInvalidRepeatedAndRewindingTimestamps",
+        "testProviderCancellationAndFinishDoNotWaitForUncancellableSource",
+        "testProviderFinishInterruptsPacingAndOldWakeCannotReviveSession",
+        "testProviderLossOfReadinessAfterCaptureResetsSession",
+    ),
 }
 UDID = "85C4FBBC-82E5-4490-8091-0E656098A995"
 RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5"
@@ -76,13 +98,13 @@ class PCIntegrationVerdictTests(unittest.TestCase):
     def test_accepts_exact_native_case_set(self):
         summary, tree = results()
         verdict = runner.inspect_results(summary, tree)
-        self.assertEqual(verdict["passed"], 19)
-        self.assertEqual(verdict["by_class"], {"PCConverterClientTests": 7, "SceneSharedAssetsInstallerTests": 12})
+        self.assertEqual(verdict["passed"], sum(map(len, REQUIRED.values())))
+        self.assertEqual(verdict["by_class"], {cls: len(methods) for cls, methods in REQUIRED.items()})
         self.assertEqual(runner.EXPECTED, {key: frozenset(value) for key, value in REQUIRED.items()})
 
     def test_rejects_skips_failures_missing_and_boolean_counts(self):
         for key, value in [("skippedTests", 1), ("failedTests", 1), ("expectedFailures", 1),
-                           ("passedTests", 18), ("totalTestCount", 20), ("passedTests", True), ("result", "Failed")]:
+                           ("passedTests", sum(map(len, REQUIRED.values())) - 1), ("totalTestCount", sum(map(len, REQUIRED.values())) + 1), ("passedTests", True), ("result", "Failed")]:
             summary, tree = results()
             summary[key] = value
             with self.subTest(key=key, value=value), self.assertRaises(ValueError):
@@ -116,7 +138,7 @@ class PCIntegrationVerdictTests(unittest.TestCase):
         summary, tree = results()
         for row in leaves(tree):
             row["nodeIdentifier"] = "WMPCIntegrationTests/" + row["nodeIdentifier"]
-        self.assertEqual(runner.inspect_results(summary, tree)["passed"], 19)
+        self.assertEqual(runner.inspect_results(summary, tree)["passed"], sum(map(len, REQUIRED.values())))
 
     def test_actual_test_sources_match_allowlist_and_sha_manifest(self):
         manifest = runner.source_manifest()
@@ -125,11 +147,19 @@ class PCIntegrationVerdictTests(unittest.TestCase):
         self.assertTrue(all(len(digest) == 64 for digest in manifest.values()))
         self.assertFalse(any("artifacts/" in path for path in manifest))
 
-    def test_command_pins_owned_simulator_and_both_test_classes(self):
+    def test_previous_two_class_pass_cannot_satisfy_extended_scene_gate(self):
+        summary, tree = results()
+        tree["testNodes"][0]["children"] = tree["testNodes"][0]["children"][:2]
+        count = sum(len(methods) for cls, methods in REQUIRED.items() if cls != "SceneWallpaperExportTests")
+        summary.update(passedTests=count, totalTestCount=count)
+        with self.assertRaises(ValueError):
+            runner.inspect_results(summary, tree)
+
+    def test_command_pins_owned_simulator_and_all_required_test_classes(self):
         command = runner.test_command(UDID, Path("out"))
         self.assertIn("id=" + UDID, command)
-        self.assertIn("-only-testing:WMPCIntegrationTests/PCConverterClientTests", command)
-        self.assertIn("-only-testing:WMPCIntegrationTests/SceneSharedAssetsInstallerTests", command)
+        for cls in REQUIRED:
+            self.assertIn("-only-testing:WMPCIntegrationTests/" + cls, command)
         self.assertIn("CODE_SIGNING_ALLOWED=NO", command)
         self.assertNotIn("-allowProvisioningUpdates", command)
 
@@ -156,8 +186,8 @@ class GeneratedProjectTests(unittest.TestCase):
 
     def test_resolves_exact_existing_source_inputs(self):
         result = runner.validate_generated_project(self.project(), runner.SPEC.parent)
-        self.assertEqual(len(result[runner.SCHEME]), 14)
-        self.assertEqual(len(result[runner.TEST_TARGET]), 3)
+        self.assertEqual(len(result[runner.SCHEME]), len(runner.PRODUCTION_SOURCES) + 1)
+        self.assertEqual(len(result[runner.TEST_TARGET]), len(runner.TEST_SOURCES) + 1)
 
     def test_rejects_doubled_external_group_path_before_simulator_creation(self):
         project = self.project()
@@ -187,8 +217,11 @@ class GeneratedProjectTests(unittest.TestCase):
         text = runner.report_summary({"verdict": "failed"})
         self.assertIn("No compilation or XCTest pass is claimed", text)
         self.assertNotIn("compiled unchanged", text)
-        passed = runner.report_summary({"verdict": "passed", "tests": {"passed": 19}})
+        passed = runner.report_summary({"verdict": "passed", "tests": {"passed": sum(map(len, REQUIRED.values()))}})
         self.assertIn("compiled unchanged", passed)
+        self.assertIn("dummy CAMetalLayer identity", passed)
+        self.assertIn("no GPU surface or native renderer", passed)
+        self.assertIn("scene host/controller/C ABI", passed)
 
 
 class PCIntegrationOwnershipTests(unittest.TestCase):

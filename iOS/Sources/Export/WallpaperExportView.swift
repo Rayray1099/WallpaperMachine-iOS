@@ -10,6 +10,7 @@ public struct WallpaperExportView: View {
     var frameProvider: WallpaperFrameProvider?
     @State private var options = WallpaperExportSettings()
     @State private var webController: WebWallpaperExportController?
+    @State private var sceneController: SceneWallpaperExportController?
     @State private var progress: WallpaperExportProgress?
     @State private var result: WallpaperExportResult?
     @State private var error: String?
@@ -26,7 +27,8 @@ public struct WallpaperExportView: View {
     }
     private var chinese: Bool { Locale.preferredLanguages.first?.hasPrefix("zh") == true }
     private func l(_ en: String, _ zh: String) -> String { chinese ? zh : en }
-    private var renderingUnavailable: Bool { item.kind == .scene && frameProvider == nil }
+    private var renderingUnavailable: Bool { item.kind == .scene && frameProvider == nil && sceneController == nil }
+    private var maximumFrameRate: Int { item.kind == .web ? 30 : (item.kind == .scene ? SceneCaptureLimits.maximumFrameRate : 120) }
 
     public var body: some View {
         NavigationStack {
@@ -38,10 +40,18 @@ public struct WallpaperExportView: View {
                         .padding(.horizontal)
                         .padding(.top, 8)
                 }
+                if item.kind == .scene, frameProvider == nil, let sceneController {
+                    SceneWallpaperExportPreview(controller: sceneController)
+                        .frame(height: 220)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                }
                 Form {
                 Section {
                     Text(verbatim: item.title).font(.headline)
                     if item.kind == .web { Text(NSLocalizedString("export.web.liveNote", comment: "")).font(.footnote).foregroundStyle(.secondary) }
+                    if item.kind == .scene { Text(NSLocalizedString("export.scene.liveNote", comment: "")).font(.footnote).foregroundStyle(.secondary) }
                     if renderingUnavailable {
                         Label(l("Real frame capture is not connected for this wallpaper. Export is unavailable; its preview image will not be substituted.",
                                 "此桌布尚未連接實際畫面擷取。無法匯出，且不會以預覽圖片冒充動畫。"), systemImage: "exclamationmark.triangle")
@@ -85,7 +95,7 @@ public struct WallpaperExportView: View {
                         Stepper(l("Width: \(options.resolution.customWidth)", "寬度：\(options.resolution.customWidth)"), value: $options.resolution.customWidth, in: 64...8192, step: 2)
                         Stepper(l("Height: \(options.resolution.customHeight)", "高度：\(options.resolution.customHeight)"), value: $options.resolution.customHeight, in: 64...8192, step: 2)
                     }
-                    Stepper(l("FPS: \(options.frameRate)", "影格率：\(options.frameRate)"), value: $options.frameRate, in: 1...(item.kind == .web ? 30 : 120))
+                    Stepper(l("FPS: \(options.frameRate)", "影格率：\(options.frameRate)"), value: $options.frameRate, in: 1...maximumFrameRate)
                     Stepper(l("Duration: \(Int(options.duration)) seconds", "長度：\(Int(options.duration)) 秒"), value: $options.duration, in: 1...600, step: 1)
                     Picker(l("Compression quality", "壓縮品質"), selection: $options.quality.preset) {
                         ForEach(WallpaperExportQualityPreset.allCases, id: \.self) { Text(verbatim: $0.rawValue).tag($0) }
@@ -143,12 +153,21 @@ public struct WallpaperExportView: View {
                 if item.kind == .web, frameProvider == nil, webController == nil {
                     webController = WebWallpaperExportController(url: sourceURL, properties: item.properties, settings: playback)
                 }
+                if item.kind == .scene, frameProvider == nil, sceneController == nil {
+                    let pixels = options.resolution.pixelSize(devicePixelSize: ExportDevice.screenPixelSize)
+                    sceneController = SceneWallpaperExportController(url: sourceURL, properties: item.properties, settings: playback,
+                        outputSize: CGSize(width: pixels.width, height: pixels.height))
+                }
                 options.frameRate = min(item.kind == .web ? 30 : 60, max(1, playback.framesPerSecond))
                 options.aspectMode = WallpaperExportAspectMode(rawValue: playback.scaling) ?? .fit
                 options.tendies.screenClass = ExportDevice.screenClass
                 options.tendies.wallpaperName = item.title
             }
-            .onDisappear { exportTask?.cancel() }
+            .onDisappear {
+                exportTask?.cancel()
+                let controller = sceneController
+                Task { @MainActor in await controller?.finishExport() }
+            }
             .sheet(isPresented: $share) { if let result { ExportShareSheet(url: result.outputURL) } }
             .sheet(isPresented: $showPCConverter) {
                 PCConverterView(item: item, sourceURL: sourceURL)
@@ -172,6 +191,12 @@ public struct WallpaperExportView: View {
                     provider = try await webController.prepare(
                         outputSize: CGSize(width: requested.width, height: requested.height), frameRate: selected.frameRate)
                 }
+                if item.kind == .scene, provider == nil {
+                    guard let sceneController else { throw SceneFrameCaptureError.notReady }
+                    let requested = selected.resolution.pixelSize(devicePixelSize: ExportDevice.screenPixelSize)
+                    provider = try await sceneController.prepare(
+                        outputSize: CGSize(width: requested.width, height: requested.height), frameRate: selected.frameRate)
+                }
                 let exported = try await WallpaperExportService().export(item: item, sourceURL: sourceURL, settings: selected,
                     frameProvider: provider, progress: { value in
                         Task { @MainActor in
@@ -190,6 +215,7 @@ public struct WallpaperExportView: View {
             // Also clean up failed prepare paths (the service only finalizes a
             // provider whose prepare returned successfully). Finish is idempotent.
             await provider?.finishExport()
+            await sceneController?.finishExport()
             exportID = nil
             exportTask = nil
             progress = nil

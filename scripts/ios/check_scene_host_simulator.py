@@ -43,6 +43,11 @@ EXPECTED_TEST_METHODS = frozenset({
     "testReconfigurationReleasesOldLayerSizeBeforePublishingNewSize",
     "testEqualBoundsDisplayScaleChangeReconfiguresPhysicalPixelsOnSameEngine",
     "testDetachedEnginePausesAndDefersSettingsUntilReattachment",
+    "testAssetInstallationClosesEveryReaderAndBlocksNewInitialization",
+    "testAssetInstallationRearmsSameURLAndFailedSessionWithoutOldReadiness",
+    "testStaleInstallationTokenCannotReleaseAnotherPublicationGate",
+    "testDismantledAndExplicitlyStoppedSurfacesNeverReviveAfterAssetsChange",
+    "testSceneExportLeaseAndAssetPublicationAreMutuallyExclusive",
 })
 MINIMUM_TESTS = len(EXPECTED_TEST_METHODS)
 OWNER_PREFIX = "WMSceneHostHarness-"

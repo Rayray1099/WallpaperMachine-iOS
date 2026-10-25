@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import CoreMedia
 import SwiftUI
 import UIKit
 import Metal
@@ -16,7 +17,7 @@ struct SceneWallpaperView: UIViewRepresentable {
     func updateUIView(_ view: SceneMetalSurface, context: Context) {
         view.apply(url: url, settings: settings, properties: properties)
     }
-    static func dismantleUIView(_ view: SceneMetalSurface, coordinator: ()) { view.shutdown() }
+    static func dismantleUIView(_ view: SceneMetalSurface, coordinator: ()) { view.retire() }
 }
 
 /// Narrow environment seams for deterministic UIKit host tests. Native calls still
@@ -33,7 +34,7 @@ struct SceneHostEnvironment {
 }
 
 @MainActor
-final class SceneMetalSurface: UIView {
+final class SceneMetalSurface: UIView, MediaFrameProviding {
     override class var layerClass: AnyClass { CAMetalLayer.self }
     private var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
     private var handle: OpaquePointer?
@@ -51,9 +52,42 @@ final class SceneMetalSurface: UIView {
     private var healthTimer: Timer?
     private var active: Bool
     private let environment: SceneHostEnvironment
+    private var explicitlyStopped = false
+    private var retired = false
+    private var frameCapture: SceneNativeFrameCapture?
 
+    var frameSource: MediaFrameSource { .scene }
+    var nativeCapturePixelSize: CGSize { configured ? metalLayer.drawableSize : .zero }
+    var frameCaptureFailure: String? {
+        if let failure = session.failure { return failure }
+        guard let handle else { return nil }
+        var reason = [CChar](repeating: 0, count: 2048)
+        let length = reason.withUnsafeMutableBufferPointer {
+            owe_scene_wallpaper_backend_failure_reason(UnsafeMutableRawPointer(handle), $0.baseAddress, $0.count)
+        }
+        return length > 0 ? String(cString: reason) : nil
+    }
+    var isFrameCaptureReady: Bool {
+        guard mayRender, configured, let handle, session.failure == nil,
+              owe_scene_wallpaper_backend_failure_reason(UnsafeMutableRawPointer(handle), nil, 0) == 0 else { return false }
+        var health = owe_surface_health()
+        return owe_scene_wallpaper_surface_health(UnsafeMutableRawPointer(handle), &health) == 0
+            && health.frames_presented > 0 && health.stop_reason == 0
+    }
+
+    func captureFrame(at time: CMTime?, maximumSize: CGSize) async throws -> MediaFrame {
+        if frameCapture == nil {
+            frameCapture = SceneNativeFrameCapture(layer: metalLayer, isReady: { [weak self] in self?.isFrameCaptureReady == true })
+        }
+        guard let frameCapture else { throw SceneFrameCaptureError.notReady }
+        return try await frameCapture.captureFrame(at: time, maximumSize: maximumSize)
+    }
+
+    private var resourceInitializationAllowed: Bool {
+        !retired && !explicitlyStopped && !SceneSharedAssetsCoordinator.shared.isInstallingAssets
+    }
     private var mayRender: Bool {
-        active && window != nil && bounds.width.isFinite && bounds.height.isFinite && bounds.width > 0 && bounds.height > 0
+        resourceInitializationAllowed && active && window != nil && bounds.width.isFinite && bounds.height.isFinite && bounds.width > 0 && bounds.height > 0
     }
     private var now: TimeInterval { environment.now() }
 
@@ -83,6 +117,7 @@ final class SceneMetalSurface: UIView {
         })
         addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hover(_:))))
         isMultipleTouchEnabled = false
+        SceneSharedAssetsCoordinator.shared.register(self)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     deinit {
@@ -94,7 +129,7 @@ final class SceneMetalSurface: UIView {
         super.layoutSubviews()
         status.frame = bounds.insetBy(dx: 12, dy: 12)
         guard syncPaused() else { return }
-        guard bounds.width > 0, bounds.height > 0, window != nil else { return }
+        guard resourceInitializationAllowed, bounds.width > 0, bounds.height > 0, window != nil else { return }
         if handle == nil, !session.attempted { initialize() }
         else if handle != nil, configureSurface(), needsSettings { _ = applyNativeSettings() }
     }
@@ -104,21 +139,23 @@ final class SceneMetalSurface: UIView {
     }
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        if window == nil { frameCapture?.invalidate() }
         guard syncPaused() else { return }
         // Screen scale can change without changing point bounds.
-        guard window != nil else { return }
+        guard resourceInitializationAllowed, window != nil else { return }
         if handle == nil { setNeedsLayout() }
         else if bounds.width > 0, bounds.height > 0, configureSurface(), needsSettings { _ = applyNativeSettings() }
     }
 
     /// Shared by application notifications and deterministic lifecycle tests.
     func setApplicationActive(_ active: Bool) {
+        if !active { frameCapture?.invalidate() }
         self.active = active
         _ = syncPaused()
     }
 
     private func initialize() {
-        guard session.beginInitialization() else { return }
+        guard resourceInitializationAllowed, session.beginInitialization() else { return }
         guard environment.metalAvailable(metalLayer) else { terminate("Metal is not available on this device."); return }
         let resources: SceneResourceDirectories
         do {
@@ -129,7 +166,7 @@ final class SceneMetalSurface: UIView {
             return
         }
         var initialized = false
-        defer { if !initialized { shutdown() } }
+        defer { if !initialized { closeNativeSession() } }
         var pointer: OpaquePointer?
         guard check(owe_scene_wallpaper_new(&pointer)) else { return }
         guard let pointer else { terminate(NSLocalizedString("scene.renderer.unavailable", comment: "Native handle allocation failed")); return }
@@ -171,6 +208,7 @@ final class SceneMetalSurface: UIView {
             self.geometry = candidate
             return true
         }
+        frameCapture?.invalidate()
         if configured, !check(owe_scene_wallpaper_begin_surface_reconfigure(handle)) { return false }
         // A live layer is changed only after the native renderer releases its surface.
         metalLayer.contentsScale = candidate.screenScale
@@ -189,15 +227,18 @@ final class SceneMetalSurface: UIView {
         return syncPaused()
     }
     func apply(url: URL, settings: PlaybackSettings, properties: [String: WallpaperProperty]) {
+        guard !retired else { return }
         if session.url != url {
-            shutdown()
+            closeNativeSession()
+            explicitlyStopped = false
             session.select(url)
             startupWait.reset(now: now)
             showStatus(NSLocalizedString("Loading native scene…", comment: ""))
         }
+        if self.settings != settings || self.properties != properties { frameCapture?.invalidate() }
         self.settings = settings; self.properties = properties
         needsSettings = true
-        guard session.failure == nil else { return }
+        guard resourceInitializationAllowed, session.failure == nil else { return }
         guard syncPaused() else { return }
         // A transient collapsed layout is paused, not a terminal geometry error.
         // Keep the new settings pending until a positive-size layout can validate them.
@@ -233,6 +274,7 @@ final class SceneMetalSurface: UIView {
         startupWait.setWaiting(eligible: mayRender && handle != nil && session.failure == nil, now: now)
         guard let handle else { return session.failure == nil }
         let paused = !mayRender
+        if paused { frameCapture?.invalidate() }
         guard lastPaused != paused else { return true }
         guard check(owe_scene_wallpaper_set_paused(handle, paused)) else { return false }
         lastPaused = paused
@@ -269,9 +311,35 @@ final class SceneMetalSurface: UIView {
     private func terminate(_ text: String) {
         session.recordFailure(text)
         showStatus(session.failure ?? text)
+        closeNativeSession()
+    }
+    /// Explicit shutdown is not undone by resource installation or queued layout.
+    func shutdown() {
+        explicitlyStopped = true
+        closeNativeSession()
+    }
+    /// SwiftUI dismantling permanently retires this view, even if a window still
+    /// retains it briefly while queued tasks and resource publication complete.
+    func retire() {
+        retired = true
+        SceneSharedAssetsCoordinator.shared.unregister(self)
         shutdown()
     }
-    func shutdown() {
+    func prepareForSharedAssetsReplacement() {
+        guard !retired, !explicitlyStopped else { return }
+        closeNativeSession()
+    }
+    func resumeAfterSharedAssetsReplacement() {
+        guard !retired, !explicitlyStopped else { return }
+        // A resource generation is a new lifetime even when the URL is unchanged
+        // or the prior generation failed before it produced its first frame.
+        session = SceneHostSession(url: session.url)
+        startupWait.reset(now: now)
+        showStatus(NSLocalizedString("Loading native scene…", comment: ""))
+        setNeedsLayout()
+    }
+    private func closeNativeSession() {
+        frameCapture?.invalidate()
         session.stop()
         startupWait.setWaiting(eligible: false, now: now)
         healthTimer?.invalidate(); healthTimer = nil

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run real PC/shared-assets Apple XCTest in an owned, headless iPad simulator."""
+"""Run real PC/shared-assets and CPU scene-adapter Apple XCTest on an owned simulator."""
 from __future__ import annotations
 
 import argparse
@@ -49,10 +49,33 @@ EXPECTED = {
         "testFailedSecondPublicationRenameRestoresOldDirectory",
         "testSymlinkMountAndParentAreRejected",
     }),
+    "SceneWallpaperExportTests": frozenset({
+        "testBGRAAndRGBAAreDecodedByCoreGraphicsWithoutSwappingChannelsOrRows",
+        "testUnrelatedLayerAndContextResponsesAreIgnored",
+        "testSynchronousResponseIsSafeAndEveryCaptureUsesUniqueContext",
+        "testQueuedResponseCannotSurviveSessionInvalidation",
+        "testCancellationEndsPromptlyAndLateResponseCannotAnswerNextRequest",
+        "testTimeoutCleansRequestAndAllowsSubsequentCapture",
+        "testReadinessLossWhileWaitingDoesNotReturnFrame",
+        "testNotReadyAndAlreadyCancelledCallsDoNotPostReadback",
+        "testConcurrentRequestIsRejectedWithoutStealingFirstContinuation",
+        "testMalformedAndOversizedMatchingPayloadsAreRejectedAndReset",
+        "testCaptureBoundsDoNotUpscaleAndRejectUnsafeSurfaceBeforePosting",
+        "testNativeResolutionBudgetDoesNotSilentlyInheritWebLimit",
+        "testProviderUsesLiveNilSourceTimeAndMonotonicPacingAcrossSessions",
+        "testProviderRejectsWrongSourceFakeTimelineAndResolutionMismatch",
+        "testProviderFailsSlowFinalCaptureAndDoesNotLowerFPSOrStayPrepared",
+        "testProviderRejectsLateWakeBeforeAnotherNativeReadback",
+        "testProviderRejectsInvalidRepeatedAndRewindingTimestamps",
+        "testProviderCancellationAndFinishDoNotWaitForUncancellableSource",
+        "testProviderFinishInterruptsPacingAndOldWakeCannotReviveSession",
+        "testProviderLossOfReadinessAfterCaptureResetsSession",
+    }),
 }
 TEST_SOURCES = {
     "PCConverterClientTests": ROOT / "iOS/Tests/Unit/Export/PCConverterClientTests.swift",
     "SceneSharedAssetsInstallerTests": ROOT / "iOS/Tests/Unit/Renderer/SceneSharedAssetsInstallerTests.swift",
+    "SceneWallpaperExportTests": ROOT / "iOS/Tests/Unit/Export/SceneWallpaperExportTests.swift",
 }
 PRODUCTION_SOURCES = tuple("iOS/Sources/" + name for name in (
     "Models/WallpaperModels.swift", "Export/PCConverterConnection.swift", "Export/PCConverterClient.swift",
@@ -60,6 +83,8 @@ PRODUCTION_SOURCES = tuple("iOS/Sources/" + name for name in (
     "Export/WallpaperExportSettings.swift", "Export/TendiesScreenClass.swift", "Export/TendiesManifest.swift",
     "Export/KeyedArchiveBuilder.swift", "Export/ZipArchiveWriter.swift",
     "Renderer/SceneSharedAssetsInstaller.swift", "Renderer/SceneSharedAssetsView.swift",
+    "Media/MediaFrame.swift", "Export/WallpaperFrameProvider.swift", "Export/MediaCaptureFrameProvider.swift",
+    "Export/LiveCaptureTiming.swift", "Renderer/SceneNativeFrameCapture.swift", "Export/SceneWallpaperExportProvider.swift",
 ))
 
 
@@ -150,13 +175,14 @@ def validate_generated_project(project, project_directory):
 def report_summary(report):
     passed = report.get("tests", {}).get("passed", 0)
     native_passed = report.get("verdict") == "passed" and passed == sum(map(len, EXPECTED.values()))
-    compilation = ("Production SwiftUI/UIKit client/importer compiled unchanged; real CryptoKit, ZIPFoundation and XCTest."
+    compilation = ("Production client/importer and CPU scene-capture adapters compiled unchanged; real Apple frameworks, ZIPFoundation and XCTest."
                    if native_passed else
                    "Configured actual production sources; native compilation/test gate did not pass. No compilation or XCTest pass is claimed.")
-    return (f"## Native PC/shared-assets Apple XCTest: {report['verdict']}\n\n"
-            f"- Verified actual passed cases: {passed}; requires all 19, zero skips/failures.\n"
+    return (f"## Native PC/assets/CPU scene-adapter Apple XCTest: {report['verdict']}\n\n"
+            f"- Verified actual passed cases: {passed}; requires all {sum(map(len, EXPECTED.values()))}, zero skips/failures.\n"
             f"- {compilation}\n"
-            "- No remote upload/download, physical iPad, renderer, Flash or installation pass claimed.\n"
+            "- Scene mailbox/clock tests use a dummy CAMetalLayer identity and synthetic pixels; no GPU surface or native renderer.\n"
+            "- No remote upload/download, scene host/controller/C ABI, physical iPad, renderer, Flash or installation pass claimed.\n"
             f"- Owned simulator cleanup: {report.get('cleanup', {}).get('status')}.\n")
 
 
@@ -183,7 +209,8 @@ def inspect_results(summary, tree):
             if not isinstance(name, str) or not isinstance(identity, str):
                 raise ValueError("missing native test identity")
             leaf = re.fullmatch(r"(test\w+)(?:\(\))?", name)
-            match = re.fullmatch(r"(?:" + TEST_TARGET + r"[/.])?(PCConverterClientTests|SceneSharedAssetsInstallerTests)[/.](test\w+)(?:\(\))?", identity)
+            classes = "|".join(re.escape(cls) for cls in EXPECTED)
+            match = re.fullmatch(r"(?:" + re.escape(TEST_TARGET) + r"[/.])?(" + classes + r")[/.](test\w+)(?:\(\))?", identity)
             if (not leaf or not match or leaf[1] != match[2] or node.get("result") != "Passed" or node.get("children")):
                 raise ValueError("invalid/failed/skipped native test identity: " + identity)
             found.append((match[1], match[2]))
@@ -268,7 +295,7 @@ def main(argv=None):
     if args.dry_run:
         manifest = source_manifest()
         print(f"Compile unchanged production sources; {len(manifest)} SHA-pinned inputs, {sum(map(len, EXPECTED.values()))} exact native cases.")
-        print("Apple XCTest + real CryptoKit/ZIPFoundation, unique headless iPad simulator, no device/network conversion/renderer/Flash coverage.")
+        print("Apple XCTest + real CryptoKit/ZIPFoundation/CoreGraphics, CPU-only synthetic scene mailbox/pacing; no GPU/host/controller/C ABI/device/network conversion/Flash coverage.")
         print("Installed stable Xcode/runtime only; missing runtime or skipped case fails; owned UUID-only shutdown/delete.")
         return 0
     if platform.system() != "Darwin":
@@ -289,7 +316,9 @@ def main(argv=None):
     runner = Runner(out, os.environ.copy(), timeout_seconds=24 * 60)
     report = {"schema": 1, "verdict": "failed", "started_utc": datetime.now(timezone.utc).isoformat(),
               "physical_device_access": False, "renderer_tested": False, "remote_transfer_tested": False,
-              "wallpaper_installation_tested": False, "api_substitutes": False}
+              "wallpaper_installation_tested": False, "api_substitutes": False,
+              "scene_test_source": "CPU synthetic notification mailbox and clock; dummy CAMetalLayer identity only",
+              "scene_host_controller_tested": False, "gpu_tested": False, "native_c_abi_tested": False}
     previous_handler = signal.getsignal(signal.SIGTERM)
 
     def interrupted(signum, frame):

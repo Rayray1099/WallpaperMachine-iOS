@@ -452,6 +452,151 @@ final class SceneHostLifecycleTests: XCTestCase {
             XCTAssertTrue(harness.events("delete").isEmpty)
         }
     }
+    @MainActor
+    func testAssetInstallationClosesEveryReaderAndBlocksNewInitialization() async throws {
+        try await withHarness { harness in
+            let first = harness.makeView()
+            let second = harness.makeView()
+            harness.attach(first)
+            harness.attach(second)
+            XCTAssertEqual(wm_scene_test_live_handle_count(), 2)
+            let coordinator = SceneSharedAssetsCoordinator.shared
+            let token = try coordinator.beginAssetInstallation()
+            defer { coordinator.endAssetInstallation(token: token) }
+            XCTAssertTrue(coordinator.isInstallingAssets)
+            XCTAssertEqual(wm_scene_test_live_handle_count(), 0)
+            XCTAssertEqual(harness.events("shutdown").count, 2)
+            XCTAssertEqual(harness.events("delete").count, 2)
+            let baseline = harness.events.count
+            let added = harness.makeView()
+            harness.attach(added)
+            for view in [first, second, added] {
+                harness.layout(view)
+                view.apply(url: harness.urlA, settings: playback(), properties: [:])
+                view.readHealth()
+            }
+            XCTAssertEqual(harness.events.count, baseline)
+            coordinator.endAssetInstallation(token: token)
+            for view in [first, second, added] { harness.layout(view) }
+            XCTAssertEqual(wm_scene_test_live_handle_count(), 3)
+        }
+    }
+
+    @MainActor
+    func testAssetInstallationRearmsSameURLAndFailedSessionWithoutOldReadiness() async throws {
+        try await withHarness { harness in
+            let view = harness.makeView()
+            harness.attach(view)
+            harness.presentedFrames(1)
+            view.readHealth()
+            XCTAssertTrue(try harness.status(in: view).isHidden)
+            let coordinator = SceneSharedAssetsCoordinator.shared
+            var token = try coordinator.beginAssetInstallation()
+            coordinator.endAssetInstallation(token: token)
+            XCTAssertFalse(try harness.status(in: view).isHidden)
+            harness.presentedFrames(0)
+            harness.layout(view)
+            XCTAssertEqual(harness.events("new").count, 2)
+            XCTAssertEqual(harness.events("apply_config").last?.source, harness.projectJSON.path)
+            wm_scene_test_fail_next("render_scale", "old resources unavailable")
+            view.apply(url: harness.urlA, settings: playback(renderScale: 0.5), properties: [:])
+            XCTAssertEqual(wm_scene_test_live_handle_count(), 0)
+            let baseline = harness.events.count
+            harness.layout(view)
+            XCTAssertEqual(harness.events.count, baseline)
+            token = try coordinator.beginAssetInstallation()
+            coordinator.endAssetInstallation(token: token)
+            harness.layout(view)
+            XCTAssertEqual(harness.events("new").count, 3)
+            XCTAssertEqual(harness.events("render_scale").last?.renderScale, 0.5)
+            XCTAssertFalse(try harness.status(in: view).isHidden)
+            harness.presentedFrames(1)
+            view.readHealth()
+            XCTAssertTrue(try harness.status(in: view).isHidden)
+        }
+    }
+
+    @MainActor
+    func testStaleInstallationTokenCannotReleaseAnotherPublicationGate() async throws {
+        try await withHarness { harness in
+            let view = harness.makeView()
+            harness.attach(view)
+            let coordinator = SceneSharedAssetsCoordinator.shared
+            let first = try coordinator.beginAssetInstallation()
+            coordinator.endAssetInstallation(token: first)
+            harness.layout(view)
+            let second = try coordinator.beginAssetInstallation()
+            defer { coordinator.endAssetInstallation(token: second) }
+            let baseline = harness.events.count
+            coordinator.endAssetInstallation(token: first)
+            coordinator.endAssetInstallation(token: UUID())
+            harness.layout(view)
+            XCTAssertTrue(coordinator.isInstallingAssets)
+            XCTAssertEqual(harness.events.count, baseline)
+            XCTAssertEqual(wm_scene_test_live_handle_count(), 0)
+            coordinator.endAssetInstallation(token: second)
+            harness.layout(view)
+            XCTAssertFalse(coordinator.isInstallingAssets)
+            XCTAssertEqual(wm_scene_test_live_handle_count(), 1)
+        }
+    }
+
+    @MainActor
+    func testDismantledAndExplicitlyStoppedSurfacesNeverReviveAfterAssetsChange() async throws {
+        try await withHarness { harness in
+            let retired = harness.makeView()
+            let stopped = harness.makeView()
+            let uninitialized = harness.makeView()
+            harness.attach(retired)
+            harness.attach(stopped)
+            stopped.shutdown()
+            uninitialized.shutdown()
+            let coordinator = SceneSharedAssetsCoordinator.shared
+            let token = try coordinator.beginAssetInstallation()
+            SceneWallpaperView.dismantleUIView(retired, coordinator: ())
+            coordinator.endAssetInstallation(token: token)
+            let baseline = harness.events.count
+            harness.attach(uninitialized)
+            for view in [retired, stopped, uninitialized] {
+                harness.layout(view)
+                view.apply(url: harness.urlA, settings: playback(), properties: [:])
+                view.readHealth()
+            }
+            // Even a new URL cannot revive a permanently dismantled view.
+            retired.apply(url: harness.urlB, settings: playback(), properties: [:])
+            harness.layout(retired)
+            XCTAssertEqual(harness.events.count, baseline)
+            XCTAssertEqual(wm_scene_test_live_handle_count(), 0)
+        }
+    }
+
+    @MainActor
+    func testSceneExportLeaseAndAssetPublicationAreMutuallyExclusive() async throws {
+        try await withHarness { harness in
+            let view = harness.makeView()
+            harness.attach(view)
+            let coordinator = SceneSharedAssetsCoordinator.shared
+            let export = try coordinator.beginExport()
+            defer { coordinator.endExport(token: export) }
+            let baseline = harness.events.count
+            XCTAssertThrowsError(try coordinator.beginAssetInstallation())
+            XCTAssertThrowsError(try coordinator.beginExport())
+            coordinator.endExport(token: UUID())
+            XCTAssertThrowsError(try coordinator.beginAssetInstallation())
+            XCTAssertEqual(harness.events.count, baseline)
+            coordinator.endExport(token: export)
+            let install = try coordinator.beginAssetInstallation()
+            defer { coordinator.endAssetInstallation(token: install) }
+            XCTAssertEqual(wm_scene_test_live_handle_count(), 0)
+            XCTAssertThrowsError(try coordinator.beginExport())
+            XCTAssertThrowsError(try coordinator.beginAssetInstallation())
+            coordinator.endAssetInstallation(token: install)
+            let nextExport = try coordinator.beginExport()
+            coordinator.endExport(token: nextExport)
+            harness.layout(view)
+            XCTAssertEqual(wm_scene_test_live_handle_count(), 1)
+        }
+    }
 }
 
 private func playback(renderScale: Double = 1) -> PlaybackSettings {
@@ -594,7 +739,7 @@ private final class Harness {
     func cleanup(file: StaticString, line: UInt) {
         wm_scene_test_set_observer(nil, nil)
         for view in views {
-            view.shutdown()
+            view.retire()
             view.removeFromSuperview()
         }
         for window in windows {

@@ -295,3 +295,5 @@
 "scene.capture.wrongSource" = "Export requires an actual native scene frame source.";
 "scene.capture.resolutionMismatch" = "The captured scene does not match the requested native resolution. No lower-resolution replacement was exported.";
 "scene.capture.tooSlow" = "Live scene capture could not maintain the requested timing. No lower frame rate was substituted.";
+"scene.capture.loadTimeout" = "The native scene did not become ready for capture within 10 seconds.";
+"export.scene.liveNote" = "Scene export captures the live native renderer, not an offline timeline. Requested native resolution is preserved; slow readback fails instead of silently lowering the frame rate.";

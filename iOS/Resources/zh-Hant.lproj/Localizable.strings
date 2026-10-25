@@ -295,3 +295,5 @@
 "scene.capture.wrongSource" = "匯出需要實際原生場景影格來源。";
 "scene.capture.resolutionMismatch" = "擷取場景與要求的原生解析度不符，未匯出較低解析度替代品。";
 "scene.capture.tooSlow" = "即時場景擷取無法維持要求的時序，未改用較低影格率。";
+"scene.capture.loadTimeout" = "原生場景未在 10 秒內準備好擷取。";
+"export.scene.liveNote" = "場景匯出會擷取即時原生算繪結果，而非離線時間軸。會保留要求的原生解析度；回讀過慢時會失敗，而不會悄悄降低影格率。";

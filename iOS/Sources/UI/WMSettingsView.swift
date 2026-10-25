@@ -12,6 +12,7 @@ struct WMSettingsView: View {
 
     @State private var isRestorePickerPresented = false
     @State private var pendingRestoreURL: URL?
+    @State private var sharedAssetsInstallationToken: UUID?
 
     var body: some View {
         WMSheetContainer(titleKey: "settings.title", onClose: { model.isSettingsPresented = false }) {
@@ -20,6 +21,19 @@ struct WMSettingsView: View {
                 playlistSection
                 microphoneSection
                 librarySection
+                SceneSharedAssetsView(
+                    onWillInstall: {
+                        guard model.exportTarget == nil else { throw SceneSharedAssetsCoordinator.CoordinationError.busy }
+                        sharedAssetsInstallationToken = try SceneSharedAssetsCoordinator.shared.beginAssetInstallation()
+                    },
+                    onInstalled: { _ in },
+                    onInstallationFinished: {
+                        if let token = sharedAssetsInstallationToken {
+                            SceneSharedAssetsCoordinator.shared.endAssetInstallation(token: token)
+                            sharedAssetsInstallationToken = nil
+                        }
+                    }
+                )
                 shortcutsSection
                 aboutSection
             }

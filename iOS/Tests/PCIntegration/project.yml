@@ -1,4 +1,4 @@
-# Actual production PC-converter UI/client and shared-assets importer with Apple XCTest.
+# Actual PC converter, shared-assets importer and CPU scene-capture adapters with Apple XCTest.
 # Isolated blank UIKit app: no renderer archive, bridge, Steam, devices or real assets.
 name: WMPCIntegrationHarness
 options:
@@ -38,18 +38,43 @@ targets:
     sources:
       - path: PCIntegrationApp.swift
       - path: ../../Sources/Models/WallpaperModels.swift
+        group: ProductionSources
       - path: ../../Sources/Export/PCConverterConnection.swift
+        group: ProductionSources
       - path: ../../Sources/Export/PCConverterClient.swift
+        group: ProductionSources
       - path: ../../Sources/Export/PCConverterView.swift
+        group: ProductionSources
       - path: ../../Sources/Export/ExportDevice.swift
+        group: ProductionSources
       - path: ../../Sources/Export/ExportGeometry.swift
+        group: ProductionSources
       - path: ../../Sources/Export/WallpaperExportSettings.swift
+        group: ProductionSources
       - path: ../../Sources/Export/TendiesScreenClass.swift
+        group: ProductionSources
       - path: ../../Sources/Export/TendiesManifest.swift
+        group: ProductionSources
       - path: ../../Sources/Export/KeyedArchiveBuilder.swift
+        group: ProductionSources
       - path: ../../Sources/Export/ZipArchiveWriter.swift
+        group: ProductionSources
       - path: ../../Sources/Renderer/SceneSharedAssetsInstaller.swift
+        group: ProductionSources
       - path: ../../Sources/Renderer/SceneSharedAssetsView.swift
+        group: ProductionSources
+      - path: ../../Sources/Media/MediaFrame.swift
+        group: ProductionSources
+      - path: ../../Sources/Export/WallpaperFrameProvider.swift
+        group: ProductionSources
+      - path: ../../Sources/Export/MediaCaptureFrameProvider.swift
+        group: ProductionSources
+      - path: ../../Sources/Export/LiveCaptureTiming.swift
+        group: ProductionSources
+      - path: ../../Sources/Renderer/SceneNativeFrameCapture.swift
+        group: ProductionSources
+      - path: ../../Sources/Export/SceneWallpaperExportProvider.swift
+        group: ProductionSources
     dependencies:
       - package: ZIPFoundation
       - sdk: CryptoKit.framework
@@ -58,6 +83,10 @@ targets:
       - sdk: Foundation.framework
       - sdk: Combine.framework
       - sdk: UniformTypeIdentifiers.framework
+      - sdk: CoreGraphics.framework
+      - sdk: CoreMedia.framework
+      - sdk: CoreVideo.framework
+      - sdk: QuartzCore.framework
     settings:
       base:
         PRODUCT_NAME: WMPCIntegrationHarness
@@ -73,6 +102,8 @@ targets:
       - path: ../Unit/Export/PCConverterClientTests.swift
         group: NativeTests
       - path: ../Unit/Renderer/SceneSharedAssetsInstallerTests.swift
+        group: NativeTests
+      - path: ../Unit/Export/SceneWallpaperExportTests.swift
         group: NativeTests
       - path: ../Support/IOSTestSupport.swift
         group: NativeTests

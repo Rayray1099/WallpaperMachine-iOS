@@ -36,6 +36,9 @@ targets:
       - path: SceneHostHarnessApp.swift
       - path: SceneHostNativeStub.c
       - path: ../../Sources/Renderer/SceneWallpaperView.swift
+      - path: ../../Sources/Renderer/SceneNativeFrameCapture.swift
+      - path: ../../Sources/Media/MediaFrame.swift
+      - path: ../../Sources/Renderer/SceneSharedAssetsCoordinator.swift
       - path: ../../Sources/Renderer/SceneResourceDirectories.swift
       - path: ../../Sources/Renderer/SceneSurfaceGeometry.swift
       - path: ../../Sources/Renderer/SceneStartupWait.swift
@@ -48,6 +51,8 @@ targets:
       - sdk: Foundation.framework
       - sdk: Metal.framework
       - sdk: QuartzCore.framework
+      - sdk: CoreGraphics.framework
+      - sdk: CoreMedia.framework
     settings:
       base:
         PRODUCT_NAME: WMSceneHostHarness
