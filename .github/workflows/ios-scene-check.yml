@@ -1,0 +1,104 @@
+# Host-executed regression for the scene engine shared with the iOS app.
+# This does not launch/build the app or claim physical iPad presentation coverage.
+name: iOS Scene Startup (native macOS)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios/main]
+    paths:
+      - "Renderer/**"
+      - "ThirdParty/**"
+      - "scripts/ios/check_scene_startup.sh"
+      - "scripts/ios/make_native_scene_fixture.py"
+      - ".github/workflows/ios-scene-check.yml"
+  pull_request:
+    branches: [ios/main]
+    paths:
+      - "Renderer/**"
+      - "ThirdParty/**"
+      - "scripts/ios/check_scene_startup.sh"
+      - "scripts/ios/make_native_scene_fixture.py"
+      - ".github/workflows/ios-scene-check.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-scene-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-scene-startup:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+      CCACHE_DIR: ${{ github.workspace }}/artifacts/ios-scene-cache/ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: "%compiler% -v"
+      CCACHE_MAXSIZE: "1G"
+      SCENE_ARTIFACTS: ${{ github.workspace }}/artifacts/ios-scene-startup/run-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify native arm64 host and install macOS-only dependencies
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          xcrun --sdk macosx --show-sdk-version
+          xcodebuild -version
+          # These are HOST dependencies, never linked into the iOS device archive.
+          for formula in cmake ninja pkg-config ccache quickjs-ng freetype lz4 nlohmann-json argparse; do
+            if ! brew list --versions "$formula" >/dev/null 2>&1; then
+              brew install --quiet "$formula"
+            fi
+          done
+          # Match Renderer/rust-toolchain.toml. Only wm-shader is compiled, not
+          # Core/Bridge or the application. rustup resolves the workspace file.
+          cd Renderer
+          rustup show active-toolchain
+          rustc --version
+          cargo --version
+
+      - name: Restore isolated host compiler caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            Renderer/target/release
+            artifacts/ios-scene-cache/ccache
+          key: ios-scene-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Renderer/Cargo.lock', 'Renderer/rust-toolchain.toml', 'ThirdParty/provenance.json', 'scripts/ios/check_scene_startup.sh') }}
+          restore-keys: |
+            ios-scene-host-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Execute actual CPU loader and gated native renderer regressions
+        run: bash scripts/ios/check_scene_startup.sh --artifacts-dir "${SCENE_ARTIFACTS}"
+
+      - name: Upload native test reports and build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-scene-startup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.SCENE_ARTIFACTS }}/*.log
+            ${{ env.SCENE_ARTIFACTS }}/*.json
+            ${{ env.SCENE_ARTIFACTS }}/summary.md
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Report pre-test infrastructure failure honestly
+        if: always()
+        run: |
+          if [ ! -f "${SCENE_ARTIFACTS}/report.json" ]; then
+            echo "## Native scene startup: no test verdict" >> "$GITHUB_STEP_SUMMARY"
+            echo "Runner/dependency setup did not reach the native tests. No CPU or GPU pass is claimed." >> "$GITHUB_STEP_SUMMARY"
+          fi

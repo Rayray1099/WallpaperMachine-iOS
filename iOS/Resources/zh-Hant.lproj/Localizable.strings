@@ -64,6 +64,7 @@
 "preview.unfavorite" = "移出我的最愛";
 "preview.next" = "下一張桌布";
 "preview.previous" = "上一張桌布";
+"scene.resources.unavailable" = "無法準備場景的共用素材資料夾。請檢查 App 的可用儲存空間後再試一次。";
 
 "inspector.details" = "詳細資料";
 "inspector.kind" = "類型";

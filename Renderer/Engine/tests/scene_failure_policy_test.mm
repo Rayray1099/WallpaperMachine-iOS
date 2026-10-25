@@ -16,6 +16,7 @@
 #include "Scene/SceneWallpaper.hpp"
 #include "Scene/SceneWallpaperSurface.hpp"
 #include "Utils/Logging.h"
+#include "Platform/Apple/SceneWallpaperBindings.h"
 
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
@@ -23,6 +24,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
@@ -92,6 +94,34 @@ std::filesystem::path WriteScene(const std::filesystem::path& root, bool with_pr
               R"("orthogonalprojection":{"width":384,"height":256}},)"
               R"("objects":[{"id":1,"name":"card","image":"models/card.json",)"
               R"("origin":[192,128,0],"scale":[1,1,1],"angles":[0,0,0],"visible":true}]})");
+    return root / "project.json";
+}
+
+// A wholly self-authored empty package: the scene exists only inside PKGV0001,
+// not as a loose JSON file, and needs no shared shader or texture resources.
+std::filesystem::path WriteEmptyPackedScene(const std::filesystem::path& root)
+{
+    WriteText(root / "project.json",
+              R"({"type":"scene","file":"scene.json","general":{"properties":{}}})");
+    const std::string scene =
+            R"({"camera":{"center":[0,0,0],"eye":[0,0,1],"up":[0,1,0]},)"
+            R"("general":{"clearcolor":"0 0 0","cameraparallax":false,)"
+            R"("orthogonalprojection":{"width":64,"height":64}},"objects":[]})";
+    std::ofstream pkg(root / "scene.pkg", std::ios::binary);
+    const auto integer = [&](uint32_t value) {
+        for (int shift = 0; shift < 32; shift += 8)
+            pkg.put(static_cast<char>((value >> shift) & 255));
+    };
+    const auto text = [&](const std::string& value) {
+        integer(static_cast<uint32_t>(value.size()));
+        pkg.write(value.data(), static_cast<std::streamsize>(value.size()));
+    };
+    text("PKGV0001");
+    integer(1);
+    text("scene.json");
+    integer(0);
+    integer(static_cast<uint32_t>(scene.size()));
+    pkg.write(scene.data(), static_cast<std::streamsize>(scene.size()));
     return root / "project.json";
 }
 
@@ -196,6 +226,7 @@ public:
         m_layer.frame         = CGRectMake(0, 0, kWidth, kHeight);
         m_layer.drawableSize  = CGSizeMake(kWidth, kHeight);
 
+        SceneWallpaperInputTestAccess::UseNullSoundOutput(m_wallpaper);
         EXPECT_TRUE(m_wallpaper.init());
         m_wallpaper.setPropertyObject(PROPERTY_FIRST_FRAME_CALLBACK,
                                       std::make_shared<FirstFrameCallback>([this] {
@@ -340,6 +371,148 @@ protected:
 
     std::filesystem::path root_;
 };
+
+// Loader failures happen before backend admission, so these tests deliberately use
+// no Metal device. A nil native layer is a real surface description; loading must
+// publish its own failure without reaching renderer creation or the preview path.
+class SceneLoadFailurePolicy : public ::testing::Test {
+protected:
+    void SetUp() override
+    {
+        static int serial = 0;
+        root_ = std::filesystem::temp_directory_path() /
+                ("owe-load-failure-" + std::to_string(::getpid()) + "-" + std::to_string(serial++));
+        ASSERT_FALSE(std::filesystem::exists(root_));
+        std::filesystem::create_directories(root_);
+        SceneBackendFaults::Instance().Reset();
+        SceneWallpaperInputTestAccess::UseNullSoundOutput(wallpaper_);
+        ASSERT_TRUE(wallpaper_.init());
+        wallpaper_.setPropertyObject(PROPERTY_FIRST_FRAME_CALLBACK,
+                std::make_shared<FirstFrameCallback>([this] { ++first_frames_; }));
+        RenderInitInfo info;
+        info.offscreen = true;
+        wallpaper_.initSurface(info);
+    }
+    void TearDown() override
+    {
+        wallpaper_.shutdown();
+        SceneBackendFaults::Instance().Reset();
+        std::error_code ignored;
+        std::filesystem::remove_all(root_, ignored);
+    }
+    SceneWallpaperConfig Config()
+    {
+        SceneWallpaperConfig config;
+        config.source = WriteScene(root_ / "scene", false).string();
+        config.assets = (root_ / "shared").string();
+        config.cache_path = (root_ / "cache").string();
+        config.muted = true;
+        return config;
+    }
+    bool WaitForFailure(SceneFailureStage stage, const std::string& reason)
+    {
+        const auto deadline = std::chrono::steady_clock::now() + 5s;
+        do {
+            const auto selection = wallpaper_.sceneBackendSelection();
+            if (selection.failure_stage == stage && selection.failure_reason == reason &&
+                wallpaper_.surfaceHealth().stop_reason == SurfaceStopReason::GraphFailed) return true;
+            std::this_thread::sleep_for(5ms);
+        } while (std::chrono::steady_clock::now() < deadline);
+        return false;
+    }
+    void ExpectNoFrame()
+    {
+        const auto health = wallpaper_.surfaceHealth();
+        EXPECT_EQ(health.frames_completed, 0u);
+        EXPECT_EQ(health.frames_presented, 0u);
+        EXPECT_EQ(health.failed_frames, 0u);
+        EXPECT_EQ(health.stop_reason, SurfaceStopReason::GraphFailed);
+        EXPECT_EQ(first_frames_.load(), 0);
+    }
+    SceneWallpaper wallpaper_;
+    std::filesystem::path root_;
+    std::atomic<int> first_frames_ { 0 };
+};
+
+TEST_F(SceneLoadFailurePolicy, MissingSharedAssetsPublishesPrepareFailureWithoutInventingAFrame)
+{
+    LogCapture log;
+    auto config = Config();
+    config.source = WriteEmptyPackedScene(root_ / "packed").string();
+    ASSERT_FALSE(std::filesystem::exists(root_ / "packed/scene.json"));
+    wallpaper_.applyConfig(config);
+    ASSERT_TRUE(WaitForFailure(SceneFailureStage::Prepare, "the shared assets folder could not be mounted"));
+    ExpectNoFrame();
+    EXPECT_EQ(LogCapture::Count(kFailureLine), 1);
+    char reason[128] {};
+    EXPECT_EQ(owe_scene_wallpaper_backend_failure(&wallpaper_), OWE_SCENE_FAILURE_PREPARE);
+    EXPECT_EQ(owe_scene_wallpaper_backend_failure_reason(&wallpaper_, reason, sizeof(reason)),
+              std::string("the shared assets folder could not be mounted").size());
+    EXPECT_STREQ(reason, "the shared assets folder could not be mounted");
+    owe_surface_health native_health {};
+    ASSERT_EQ(owe_scene_wallpaper_surface_health(&wallpaper_, &native_health), 0);
+    EXPECT_EQ(native_health.frames_presented, 0u);
+
+    // A surface rebuild is not a successful load: it must not clear this reason
+    // or call the first-frame callback for a scene that never reached parsing.
+    ASSERT_TRUE(wallpaper_.beginSurfaceReconfigure());
+    RenderInitInfo replacement;
+    replacement.offscreen = true;
+    EXPECT_TRUE(wallpaper_.finishSurfaceReconfigure(replacement));
+    EXPECT_EQ(wallpaper_.sceneBackendSelection().failure_reason,
+              "the shared assets folder could not be mounted");
+    ExpectNoFrame();
+
+    // The valid subsequent load really crosses admission. Refuse it there to
+    // prove recovery without asking this CPU test to create any Metal device.
+    std::filesystem::create_directories(config.assets);
+    config.force_shader_refresh = true;
+    SceneBackendFaults::Instance().Arm(SceneBackendFault::Admission, "new admission reached");
+    wallpaper_.applyConfig(config);
+    ASSERT_TRUE(WaitForFailure(SceneFailureStage::Unsupported, "new admission reached"));
+    EXPECT_EQ(wallpaper_.surfaceHealth().frames_presented, 0u);
+}
+
+TEST_F(SceneLoadFailurePolicy, AMissingProjectDirectoryPublishesItsMountFailure)
+{
+    std::filesystem::create_directories(root_ / "shared");
+    SceneWallpaperConfig config;
+    config.source = (root_ / "missing/scene.json").string();
+    config.assets = (root_ / "shared").string();
+    config.muted = true;
+    wallpaper_.applyConfig(config);
+    ASSERT_TRUE(WaitForFailure(SceneFailureStage::Prepare, "the wallpaper files could not be mounted"));
+    ExpectNoFrame();
+}
+
+TEST_F(SceneLoadFailurePolicy, EveryPreAdmissionFailureHasASpecificReasonAndNoFirstFrame)
+{
+    std::filesystem::create_directories(root_ / "shared");
+    struct Case { const char* reason; const char* project; const char* scene; const char* saved; };
+    const Case cases[] = {
+        { "the wallpaper source could not be resolved", "not json", "{}", nullptr },
+        { "the project is not a scene", R"({"type":"video","file":"movie.mp4"})", "{}", nullptr },
+        { "the project properties could not be read", R"({"type":"scene","file":"scene.json"})", "{}", nullptr },
+        { "the scene file is missing or empty", R"({"type":"scene","file":"scene.json","general":{"properties":{}}})", "", nullptr },
+        { "the scene document could not be parsed", R"({"type":"scene","file":"scene.json","general":{"properties":{}}})", "{}", nullptr },
+        { "the saved project properties could not be read", R"({"type":"scene","file":"scene.json","general":{"properties":{}}})", R"({"objects":[]})", "not json" },
+    };
+    for (std::size_t i = 0; i < std::size(cases); ++i) {
+        SCOPED_TRACE(cases[i].reason);
+        const auto folder = root_ / ("invalid-" + std::to_string(i));
+        WriteText(folder / "project.json", cases[i].project);
+        WriteText(folder / "scene.json", cases[i].scene);
+        SceneWallpaperConfig config;
+        config.source = (folder / "project.json").string();
+        config.assets = (root_ / "shared").string();
+        config.muted = true;
+        config.has_project_property_override = cases[i].saved != nullptr;
+        if (cases[i].saved != nullptr) config.project_property_override_json = cases[i].saved;
+        wallpaper_.applyConfig(config);
+        ASSERT_TRUE(WaitForFailure(SceneFailureStage::Prepare, cases[i].reason));
+        ExpectNoFrame();
+    }
+}
 
 } // namespace
 
@@ -599,6 +772,79 @@ TEST_F(SceneFailurePolicy, ASurfaceTheNativeRendererCannotTakeIsHeld)
     ExpectHeld(running, SceneFailureStage::Surface, "forced surface failure");
 }
 
+TEST_F(SceneFailurePolicy, AnEmptyPackedSceneIsRefusedWithoutANativeFrame)
+{
+    const auto project = WriteEmptyPackedScene(root_ / "empty");
+    ASSERT_FALSE(std::filesystem::exists(root_ / "empty/scene.json"));
+    Running running(project, root_ / "run");
+    // This callback also settles held parsed scenes; it is not present evidence.
+    ASSERT_TRUE(running.WaitForFirstFrame());
+    EXPECT_EQ(running.Presented(), 0u);
+    EXPECT_EQ(running.Completed(), 0u);
+    const auto selection = running.wallpaper().sceneBackendSelection();
+    EXPECT_EQ(selection.failure_stage, SceneFailureStage::Unsupported);
+    EXPECT_EQ(selection.failure_reason,
+              "the wallpaper was parsed without the Metal translation of its shaders");
+    EXPECT_EQ(running.wallpaper().surfaceHealth().stop_reason, SurfaceStopReason::GraphFailed);
+}
+
+TEST_F(SceneFailurePolicy, AFailedReplacementStaysBlockedAcrossResizeAndAValidReloadPresentsAgain)
+{
+    LogCapture log;
+    const auto valid = WriteScene(root_ / "scene", false);
+    Running running(valid, root_ / "run");
+    ASSERT_TRUE(running.WaitForFirstFrame());
+    ASSERT_GT(running.Presented(), 0u);
+    running.Reload(valid, root_ / "missing-shared");
+    const auto deadline = std::chrono::steady_clock::now() + 5s;
+    while (running.wallpaper().surfaceHealth().stop_reason != SurfaceStopReason::GraphFailed &&
+           std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(5ms);
+    }
+    ASSERT_EQ(running.wallpaper().surfaceHealth().stop_reason, SurfaceStopReason::GraphFailed);
+    EXPECT_EQ(running.wallpaper().sceneBackendSelection().failure_reason,
+              "the shared assets folder could not be mounted");
+    const auto presented = running.Presented();
+    const auto completed = running.Completed();
+    const int first_frames = running.FirstFrames();
+    ASSERT_TRUE(running.Resize(640, 360));
+    // Resume and a live setting are real queued commands. Neither is a load,
+    // and neither may make the failed replacement draw the outgoing scene.
+    running.wallpaper().setPaused(false);
+    running.wallpaper().setPropertyFloat(PROPERTY_RENDER_SCALE, 0.5f);
+    // Callback installation replays on the main looper after those two writes
+    // have posted their render commands. Its state outlives this test's wait.
+    struct MainAck { std::mutex mutex; std::condition_variable changed; bool seen { false }; };
+    const auto ack = std::make_shared<MainAck>();
+    running.wallpaper().setPropertyObject(PROPERTY_POINTER_INPUT_CALLBACK,
+            std::make_shared<PointerInputCallback>([ack](bool) {
+                std::scoped_lock lock(ack->mutex);
+                ack->seen = true;
+                ack->changed.notify_all();
+            }));
+    {
+        std::unique_lock lock(ack->mutex);
+        ASSERT_TRUE(ack->changed.wait_for(lock, 5s, [&] { return ack->seen; }));
+    }
+    ASSERT_TRUE(running.Resize(800, 450)); // now a barrier for their render commands
+    EXPECT_EQ(running.Presented(), presented);
+    EXPECT_EQ(running.Completed(), completed);
+    EXPECT_EQ(running.FirstFrames(), first_frames);
+    EXPECT_EQ(running.wallpaper().surfaceHealth().stop_reason, SurfaceStopReason::GraphFailed);
+    EXPECT_EQ(running.wallpaper().sceneBackendSelection().failure_reason,
+              "the shared assets folder could not be mounted");
+
+    running.Reload(valid, root_ / "run");
+    const auto recovered_deadline = std::chrono::steady_clock::now() + 30s;
+    while (running.Presented() <= presented && std::chrono::steady_clock::now() < recovered_deadline) {
+        std::this_thread::sleep_for(5ms);
+    }
+    EXPECT_GT(running.Presented(), presented) << "the valid reload never presented on the replacement surface";
+    EXPECT_FALSE(running.wallpaper().sceneBackendSelection().failed());
+    EXPECT_TRUE(running.wallpaper().sceneBackendSelection().failure_reason.empty());
+    EXPECT_EQ(running.wallpaper().surfaceHealth().stop_reason, SurfaceStopReason::Running);
+}
+
 // A surface with nothing the native renderer could adopt is a failure to report,
 // not a reason to create some other renderer.
 TEST_F(SceneFailurePolicy, ASurfaceWithNoMetalLayerIsAFailureToReport)
@@ -606,6 +852,7 @@ TEST_F(SceneFailurePolicy, ASurfaceWithNoMetalLayerIsAFailureToReport)
     LogCapture log;
 
     SceneWallpaper wallpaper;
+    SceneWallpaperInputTestAccess::UseNullSoundOutput(wallpaper);
     ASSERT_TRUE(wallpaper.init());
     RenderInitInfo info;
     info.offscreen = true;

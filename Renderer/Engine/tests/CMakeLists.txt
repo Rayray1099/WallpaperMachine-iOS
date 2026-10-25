@@ -1037,7 +1037,8 @@ if(APPLE)
       perspective_image_layer_test
       model_parallax_test
       unbound_texture_slot_test
-      scene_lighting_fog_test)
+      scene_lighting_fog_test
+      ios_scene_startup_render_test)
     add_executable(${scene_render_test} ${scene_render_test}.mm)
     target_link_libraries(${scene_render_test} PRIVATE scene_test_support GTest::gtest_main)
     set_target_properties(${scene_render_test} PROPERTIES

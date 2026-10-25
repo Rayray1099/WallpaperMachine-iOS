@@ -78,6 +78,14 @@ jobs:
             -o "${RUNNER_TEMP}/wm-ios-asset-path-tests"
           "${RUNNER_TEMP}/wm-ios-asset-path-tests" | tee "${IOS_ARTIFACTS}/asset-path-tests.log"
 
+      - name: Test scene resource directory preparation on macOS
+        run: |
+          set -euo pipefail
+          xcrun swiftc -parse-as-library \
+            iOS/Sources/Renderer/SceneResourceDirectories.swift scripts/ios/test_scene_resources.swift \
+            -o "${RUNNER_TEMP}/wm-ios-scene-resource-tests"
+          "${RUNNER_TEMP}/wm-ios-scene-resource-tests" | tee "${IOS_ARTIFACTS}/scene-resource-tests.log"
+
       - name: Build renderer and unsigned app
         run: python3 scripts/ios/build.py --artifacts-dir "${IOS_ARTIFACTS}"
 

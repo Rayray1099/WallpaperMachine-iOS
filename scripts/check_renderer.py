@@ -16,6 +16,7 @@ import subprocess
 from build import build_environment, cargo_environment
 from lib.paths import ENGINE, RENDERER, RENDERER_ARTIFACTS, ROOT
 from lib.xcode import skipped_test_lines
+from ios.make_native_scene_fixture import build_fixture as native_scene_fixture
 
 GENERATED_CASE_COUNT = 12
 # One registry owns the build/run/verdict and the Metal-device prerequisite.
@@ -51,7 +52,8 @@ REGRESSION_BINARIES = {
     "metal_scene_draw_smoke": True, "metal_poster_capture_test": True,
     "metal_video_texture_test": True, "unchanged_present_test": True, "scene_failure_policy_test": True,
     "scene_load_sound_test": True,
-    "scene_harness_selftest": True, "backdrop_scene_test": True, "horizontal_flip_pointer_test": True,
+    "scene_harness_selftest": True, "ios_scene_startup_render_test": True,
+    "backdrop_scene_test": True, "horizontal_flip_pointer_test": True,
     "scene_placeholder_picture_test": True, "scene_passthrough_layout_test": True,
     "scene_fullscreen_parallax_test": True, "scene_layer_size_test": False,
     "layer_composite_render_test": True, "cover_slot_composite_test": True, "perspective_image_layer_test": True, "model_parallax_test": True, "unbound_texture_slot_test": True, "scene_lighting_fog_test": True,
@@ -632,6 +634,12 @@ def main(argv=None):
             return 1
         gpu_available = probe["probe_exit"] == 0
     report["gpu_checks_executed"] = gpu_available
+    if gpu_available:
+        # The packed iOS startup control is wholly generated, not an installed
+        # Workshop project. Its native test reads no loose scene/shader files.
+        packed_control = native_scene_fixture(out / "native-scene-fixture")
+        env["WM_NATIVE_SCENE_FIXTURE"] = packed_control["project_directory"]
+        report["native_scene_fixture_sha256"] = packed_control["archive_sha256"]
     timers_precise = True
     if args.allow_imprecise_timers:
         report["timer_preflight"] = timer_preflight(out, env)

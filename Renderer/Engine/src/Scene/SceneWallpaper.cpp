@@ -285,6 +285,8 @@ private:
     /// later load reads, so the saved look is what the next load shows.
     void previewProjectProperties(const std::string& json);
     void loadScene();
+    /// Publishes a pre-admission load failure on the render thread; never a frame.
+    void reportLoadFailure(std::string reason);
     bool loadNonSceneProject(const ProjectManifest& manifest);
 
     MHANDLER_CMD(LOAD_SCENE);
@@ -348,6 +350,7 @@ public:
     {
         CMD_INIT_SURFACE,
         CMD_SET_SCENE,
+        CMD_LOAD_FAILED,
         CMD_SET_FILLMODE,
         CMD_SET_SCALINGMODE,
         CMD_SET_SCALINGFACTOR,
@@ -419,6 +422,7 @@ public:
                 CASE_CMD(SYSTEM_MEDIA_ARTWORK);
                 CASE_CMD(APPLY_PROJECT_PROPERTIES);
                 CASE_CMD(SET_SCENE);
+                CASE_CMD(LOAD_FAILED);
                 CASE_CMD(SET_SPEED);
                 CASE_CMD(INIT_SURFACE);
                 CASE_CMD(BEGIN_SURFACE_RECONFIGURE);
@@ -639,7 +643,7 @@ public:
     /// What a held failure leaves on the surface, and what the host is told.
     /// Safe to call again for the same failure.
     void settleFailedScene() {
-        if (m_failure_stage == SceneFailureStage::None || m_scene == nullptr) return;
+        if (m_load_failed || m_failure_stage == SceneFailureStage::None || m_scene == nullptr) return;
         showStillIfNothingDrawn();
         if (! m_failure_first_frame_sent && ! m_scene->first_frame_ok) {
             m_failure_first_frame_sent = true;
@@ -1314,6 +1318,23 @@ private:
         replayMediaEvents();
     }
 
+    /// Loading failed before a scene could be committed. Unlike a refused
+    /// parsed scene, this must neither display a preview nor settle the host's
+    /// first-frame callback. Keep any last picture, publish the reason and stop.
+    MHANDLER_CMD(LOAD_FAILED) {
+        std::shared_ptr<uint64_t> epoch;
+        std::string reason;
+        if (! msg->findObject("epoch", &epoch) || epoch == nullptr ||
+            *epoch != surfaceEpoch() || ! msg->findString("reason", &reason)) return;
+        // Loads are serial on the control looper and posted FIFO here. A new
+        // attempt supersedes a previous load/backend failure, even if it fails
+        // at a different prerequisite before SET_SCENE can clear the old one.
+        clearFailure();
+        m_load_failed = true;
+        reportFailure(SceneFailureStage::Prepare, std::move(reason));
+        suspendAfterGraphFailure();
+    }
+
     /// Commits a scene the control thread loaded (e6 R20, R-H22).
     MHANDLER_CMD(SET_SCENE) {
         std::shared_ptr<Scene> incoming;
@@ -1325,6 +1346,7 @@ private:
         bool takes_pointer = true;
         if (! replaceCurrentScene(std::move(incoming), takes_pointer)) return;
 
+        m_load_failed = false;
         m_failure_first_frame_sent = false;
         // A surface the host has released stays blocked: the scene waits for the one that
         // replaces it, and only the failure of the scene it replaces ends here.
@@ -1417,7 +1439,7 @@ private:
         m_surface_handed.store(true, std::memory_order_release);
         m_surface_released     = false;
         m_scene_awaits_surface = false;
-        clearRenderBlock();
+        if (! m_load_failed) clearRenderBlock();
         syncFrameClock();
         publishScreenResolution();
         main_handler.sendCmdLoadScene(epoch);
@@ -1478,6 +1500,14 @@ private:
         m_surface_released = false;
         // A display change is news to scripts that size themselves against the screen.
         publishScreenResolution();
+        // A new layer cannot repair a failed load. In particular, do not
+        // rebuild the outgoing scene that a failed replacement left retained,
+        // clear its diagnostic, or announce a first frame for that replacement.
+        if (m_load_failed) {
+            publishPauseReasons();
+            ticket.succeed(true);
+            return;
+        }
         // A scene that landed while the surface was out chose no renderer and built no graph.
         const bool scene_waited = std::exchange(m_scene_awaits_surface, false) && m_scene != nullptr;
 
@@ -1600,7 +1630,7 @@ public:
             LOG_ERROR("scene cannot be drawn with native Metal (%s): %s; holding the %s",
                       ToString(selection.failure_stage),
                       selection.failure_reason.c_str(),
-                      m_layer_has_picture ? "last frame" : "preview picture");
+                      m_layer_has_picture ? "last frame" : m_load_failed ? "unchanged surface" : "preview picture");
         } else {
             // Once per scene: the first thing to know about a wallpaper that looks
             // wrong is whether a renderer is drawing it.
@@ -1639,6 +1669,9 @@ private:
     /// Why this scene is held without a renderer drawing it, or `None`. Render
     /// thread only; the host reads the published copy in `m_backend_selection`.
     SceneFailureStage                    m_failure_stage { SceneFailureStage::None };
+    /// A pre-admission failure has no new scene to settle or rebuild. Only a
+    /// later successful scene commit clears this, not a surface replacement.
+    bool                                 m_load_failed { false };
     /// Whether the host has been told a first picture exists for the scene
     /// whose failure is being held, so it is told once.
     bool                                 m_failure_first_frame_sent { false };
@@ -2234,6 +2267,13 @@ void MainHandler::previewProjectProperties(const std::string& json) {
     CreateMsgWithCmd(m_render_handler, RenderHandler::CMD::CMD_APPLY_PROJECT_PROPERTIES)->post();
 }
 
+void MainHandler::reportLoadFailure(std::string reason) {
+    PostToRender(m_render_handler, RenderHandler::CMD::CMD_LOAD_FAILED, [&](looper::Message& out) {
+        out.setString("reason", std::move(reason));
+        out.setObject("epoch", std::make_shared<uint64_t>(m_loaded_epoch));
+    });
+}
+
 void MainHandler::loadScene() {
     // Nothing to load, or nowhere to show it yet: the surface hand-over asks again.
     if (m_source.empty() || ! m_render_handler->renderSurfaceReady()) return;
@@ -2244,6 +2284,7 @@ void MainHandler::loadScene() {
     std::string           error;
     if (! ResolveSceneSourcePaths(m_source, &resolved, &error)) {
         LOG_ERROR("scene not loaded, the source cannot be resolved: %s", error.c_str());
+        reportLoadFailure("the wallpaper source could not be resolved");
         return;
     }
     if (resolved.kind != SceneSourceResolutionKind::Scene) {
@@ -2258,11 +2299,13 @@ void MainHandler::loadScene() {
         if (shared == nullptr || ! vfs->Mount("/assets", std::move(shared))) {
             LOG_ERROR("scene not loaded, the shared assets cannot be mounted: %s",
                       m_assets.c_str());
+            reportLoadFailure("the shared assets folder could not be mounted");
             return;
         }
     }
     if (! MountSceneSource(*vfs, resolved.scene_source, &error)) {
         LOG_ERROR("scene not loaded, the wallpaper's files cannot be mounted: %s", error.c_str());
+        reportLoadFailure("the wallpaper files could not be mounted");
         return;
     }
     if (! m_cache_path.empty()) {
@@ -2275,6 +2318,7 @@ void MainHandler::loadScene() {
     }
     if (! InstallVirtualAssets(*vfs)) {
         LOG_ERROR("scene not loaded, the built-in assets cannot be installed");
+        reportLoadFailure("the built-in scene assets could not be installed");
         return;
     }
     const std::string scene_text =
@@ -2282,12 +2326,14 @@ void MainHandler::loadScene() {
     if (scene_text.empty()) {
         LOG_ERROR("scene not loaded, the scene file is missing or empty: %s",
                   resolved.scene_source.pkg_entry.c_str());
+        reportLoadFailure("the scene file is missing or empty");
         return;
     }
 
     ProjectProperties authored;
     if (! ParseProjectProperties(m_source, &authored, &error)) {
         LOG_ERROR("scene not loaded, the project properties cannot be read: %s", error.c_str());
+        reportLoadFailure("the project properties could not be read");
         return;
     }
     ProjectProperties merged = authored;
@@ -2296,6 +2342,7 @@ void MainHandler::loadScene() {
         if (! ParseFlatProjectPropertyOverrideJson(m_override_json, &saved, &error)) {
             LOG_ERROR("scene not loaded, the saved property choices cannot be read: %s",
                       error.c_str());
+            reportLoadFailure("the saved project properties could not be read");
             return;
         }
         merged = MergeProjectProperties(authored, saved);
@@ -2314,6 +2361,7 @@ void MainHandler::loadScene() {
     auto          scene = parser.Parse(request, scene_text, *vfs, *m_sound_manager);
     if (scene == nullptr) {
         LOG_ERROR("scene not loaded, the parse produced no scene: %s", m_source.c_str());
+        reportLoadFailure("the scene document could not be parsed");
         return;
     }
     scene->project_path = m_source;
@@ -2333,6 +2381,7 @@ void MainHandler::loadScene() {
 
 bool MainHandler::loadNonSceneProject(const ProjectManifest& manifest) {
     LOG_ERROR("scene not loaded, the project is not a scene (%s)", ToString(manifest.type));
+    reportLoadFailure("the project is not a scene");
     return false;
 }
 

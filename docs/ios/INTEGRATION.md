@@ -34,6 +34,14 @@ Build Agent MUST adapt its project/script to that actual contract:
 
 Media and Renderer both proposed AVAudioEngine microphone feed; avoid simultaneous recording, use one shared source during integration. Export protocol+type erasure and Media capture protocol may coexist with conversion adapter; 3-arg export initializer must stay valid.
 
+## Native scene startup
+
+The iOS host prepares an empty `Application Support/WallpaperMachine/SharedAssets` directory before creating the native scene. This satisfies the native `/assets` mount even for a self-contained project; it does not supply or redistribute licensed Wallpaper Engine resources. Existing user-owned assets are preserved, child symlinks/non-directory conflicts are rejected, and shader caching remains optional. A preparation failure is shown explicitly rather than starting a doomed renderer or repeatedly retrying on layout.
+
+Native pre-admission source/mount/document/property failures are published through the existing backend-failure query with a fixed, path-independent reason. They stop the frame clock without a preview/first-frame callback or presented-frame credit. A surface resize cannot clear a failed replacement and resume the outgoing graph; a successful new scene commit clears that state. Reapplying an identical configuration after repairing files is not a guaranteed reload: use an explicit refresh or a new scene host.
+
+The old empty package is an import-only negative rendering fixture: no material means no Metal shader translation attempt, which native admission refuses. `python3 scripts/ios/make_native_scene_fixture.py --output <new-folder>` instead generates a wholly self-authored packaged quad, shader pair and RGBA texture with no shared-asset dependencies. Its native test checks actual detached GPU pixels when Metal is available, not iPad presentation. `frames_presented > 0` remains the iOS readiness gate; the native first-frame callback also settles some upstream failures and must not be used as proof of rendering.
+
 ## Build/renderer agreement
 
 The device build uses SDK `iphoneos`, deployment floor 18.0, architecture `arm64` and Rust target `aarch64-apple-ios`. `iOS/Generated/Renderer` is the single output root; older `build/ios/renderer` and UniFFI proposals are obsolete.

@@ -25,6 +25,7 @@ final class SceneMetalSurface: UIView {
     private var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
     private var handle: OpaquePointer?
     private var configured = false
+    private var initializationAttempted = false
     private var geometry = CGSize.zero
     private let url: URL
     private var settings: PlaybackSettings
@@ -67,29 +68,36 @@ final class SceneMetalSurface: UIView {
         super.layoutSubviews()
         status.frame = bounds.insetBy(dx: 12, dy: 12)
         guard bounds.width > 0, bounds.height > 0 else { return }
-        if handle == nil { initialize() }
-        else if geometry != bounds.size { configureSurface() }
+        if handle == nil, !initializationAttempted { initialize() }
+        else if handle != nil, geometry != bounds.size { configureSurface() }
     }
     override func didMoveToWindow() { super.didMoveToWindow(); syncPaused() }
 
     private func initialize() {
+        initializationAttempted = true
         guard metalLayer.device != nil else { fail("Metal is not available on this device."); return }
+        let resources: SceneResourceDirectories
+        do {
+            // The engine must mount this directory even when the project has no
+            // external shared assets. Creating an empty directory supplies no
+            // licensed assets and does not replace assets a project requires.
+            resources = try SceneResourceDirectories.prepare()
+        } catch {
+            fail(NSLocalizedString("scene.resources.unavailable", comment: "Scene resource directory preparation failed"))
+            return
+        }
+        var initialized = false
+        defer { if !initialized { shutdown() } }
         var pointer: OpaquePointer?
         guard check(owe_scene_wallpaper_new(&pointer)), let pointer else { return }
         handle = pointer
-        guard check(owe_scene_wallpaper_init(pointer)) else { return }
-        configureSurface()
+        guard check(owe_scene_wallpaper_init(pointer)), configureSurface() else { return }
         let projectRoot = url.hasDirectoryPath ? url : url.deletingLastPathComponent()
         let projectJSON = projectRoot.appendingPathComponent("project.json")
         let source = FileManager.default.fileExists(atPath: projectJSON.path) ? projectJSON : url
-        // User-owned Wallpaper Engine assets may be imported to the sibling SharedAssets folder.
-        // Never embed/re-distribute licensed shared resources in the application.
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let assets = base.appendingPathComponent("WallpaperMachine/SharedAssets")
-        let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!.appendingPathComponent("SceneShaders")
-        try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        let cachePath = resources.shaderCache?.path ?? ""
         let json = SceneWallpaperPropertyJSON.flatten(properties) ?? "{}"
-        let result = source.path.withCString { s in assets.path.withCString { a in cache.path.withCString { c in json.withCString { p in
+        let result = source.path.withCString { s in resources.sharedAssets.path.withCString { a in cachePath.withCString { c in json.withCString { p in
             owe_scene_wallpaper_apply_config(pointer, s, a, c, UInt32(max(1, settings.framesPerSecond)), window == nil,
                 Float(min(1, max(0, settings.volume))), settings.isMuted, false, p)
         } } } }
@@ -99,24 +107,27 @@ final class SceneMetalSurface: UIView {
         healthTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.readHealth() }
         }
+        initialized = true
     }
-    private func configureSurface() {
-        guard let handle else { return }
+    @discardableResult private func configureSurface() -> Bool {
+        guard let handle else { return false }
         let scale = window?.screen.scale ?? traitCollection.displayScale
         metalLayer.contentsScale = scale
         let renderScale = min(2, max(0.1, settings.renderScale))
         let pixel = CGSize(width: max(1, bounds.width * scale * renderScale), height: max(1, bounds.height * scale * renderScale))
         metalLayer.drawableSize = pixel
         let layerPointer = Unmanaged.passUnretained(metalLayer).toOpaque()
-        if configured, !check(owe_scene_wallpaper_begin_surface_reconfigure(handle)) { return }
+        if configured, !check(owe_scene_wallpaper_begin_surface_reconfigure(handle)) { return false }
         let result: Int32
         if configured {
             result = owe_scene_wallpaper_finish_surface_reconfigure(handle, layerPointer, UInt32(bounds.width), UInt32(bounds.height), UInt32(pixel.width), UInt32(pixel.height), Double(scale))
         } else {
             result = owe_scene_wallpaper_init_metal(handle, layerPointer, UInt32(bounds.width), UInt32(bounds.height), UInt32(pixel.width), UInt32(pixel.height), Double(scale))
         }
-        if check(result) { geometry = bounds.size; configured = true }
+        guard check(result) else { return false }
+        geometry = bounds.size; configured = true
         syncPaused()
+        return true
     }
     func apply(settings: PlaybackSettings, properties: [String: WallpaperProperty]) {
         let resize = self.settings.renderScale != settings.renderScale

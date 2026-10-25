@@ -203,6 +203,14 @@ These are bounded device observations, not a blanket parity claim. See [STATUS.m
 
 Copied real-project source hashes, sizes, timestamps and identities were unchanged before/after ZIP creation. No asset contents, device screenshots, supplied dylib or local injected IPA are committed. The temporary receiver accepts only exact named synthetic outputs and does not grant app-filesystem or personal-library access.
 
+## Native scene startup regression (local / CI, no device access)
+
+`SceneResourceDirectories` is exercised directly by `scripts/ios/test_scene_resources.swift`, compiled with the actual Foundation helper. Windows execution passed 32 checks and reproduced the old host's missing-SharedAssets setup. The iOS build workflow now executes the same test on macOS before compiling the app. This filesystem test is not Metal rendering.
+
+`bash scripts/ios/check_scene_startup.sh --artifacts-dir <new-run>` builds only four native macOS engine test binaries and executes their GTest JSON reports. `SceneLoadFailurePolicy` has no GPU prerequisite and must actually execute without skips: missing shared mount, missing project mount and a table of six pre-admission failures must expose a specific backend reason with zero native frames/callback credit. GPU failure/recovery and self-authored packed-quad pixel tests accept only explicit no-Metal-device skips, reported separately. Missing fixtures, zero matched tests, disabled cases and other skips fail this gate. The dedicated `iOS Scene Startup (native macOS)` workflow is not an iPad/simulator test.
+
+Generate the positive import/render control with `python3 scripts/ios/make_native_scene_fixture.py --output <new-folder>`; all assets are procedural/self-authored and all dependencies are packaged. Seven Python tests passed for exact formats, closure, determinism and overwrite refusal. The earlier empty package remains an import-only negative rendering control; it must not be called a successful Metal frame. The new native tests have not yet executed on macOS at this checkpoint, and physical testing is explicitly paused while the user is away.
+
 ## Known gaps and reporting rules
 
 - `wm.preview`/`wm.export` live in an item's detail screen. The UI test skips that

@@ -64,6 +64,7 @@
 "preview.unfavorite" = "Remove from Favorites";
 "preview.next" = "Next Wallpaper";
 "preview.previous" = "Previous Wallpaper";
+"scene.resources.unavailable" = "The scene’s shared asset folder could not be prepared. Check the app’s available storage and try again.";
 
 "inspector.details" = "Details";
 "inspector.kind" = "Type";
