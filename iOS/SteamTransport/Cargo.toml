@@ -1,0 +1,28 @@
+[package]
+name = "wm-steam-transport"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+[workspace]
+
+[lib]
+name = "wm_steam_transport"
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "fs", "io-util", "macros", "time"] }
+sha1 = "0.10"
+steam-vent = "=0.3.1"
+steam-cdn = "=1.0.0"
+keyvalues-parser = "0.2"
+zeroize = "1"
+# steam-cdn's default reqwest TLS uses OpenSSL; build it from source for iOS,
+# never link a host Homebrew libssl binary.
+openssl = { version = "0.10", features = ["vendored"] }
+
+[dev-dependencies]
+tempfile = "3"

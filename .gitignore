@@ -72,6 +72,7 @@ Renderer/target/
 # iOS outputs, local device evidence, and signing material
 .local/
 iOS/Generated/
+iOS/SteamTransport/target/
 iOS/*.xcodeproj/
 iOS/build/
 *.ipa

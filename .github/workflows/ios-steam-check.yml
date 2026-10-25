@@ -1,0 +1,45 @@
+name: iOS Steam Native Check
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios/main]
+    paths:
+      - 'iOS/SteamTransport/**'
+      - '.github/workflows/ios-steam-check.yml'
+permissions:
+  contents: read
+jobs:
+  native-steam:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            iOS/SteamTransport/target
+          key: ios-steam-${{ runner.os }}-${{ hashFiles('iOS/SteamTransport/Cargo.lock', 'iOS/SteamTransport/Cargo.toml') }}
+      - name: Resolve and test native transport without live accounts
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/ios-steam
+          cargo test --manifest-path iOS/SteamTransport/Cargo.toml 2>&1 | tee artifacts/ios-steam/native-test.log
+      - name: Compile real iOS ARM64 static library
+        run: |
+          set -o pipefail
+          rustup target add aarch64-apple-ios
+          export IPHONEOS_DEPLOYMENT_TARGET=18.0
+          cargo build --manifest-path iOS/SteamTransport/Cargo.toml --locked --release --target aarch64-apple-ios 2>&1 | tee artifacts/ios-steam/ios-compile.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-steam-check-${{ github.run_id }}
+          path: |
+            artifacts/ios-steam/
+            iOS/SteamTransport/Cargo.lock
+          if-no-files-found: warn
+          retention-days: 7
