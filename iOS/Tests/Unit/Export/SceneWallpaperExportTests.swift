@@ -218,7 +218,7 @@ final class SceneWallpaperExportTests: XCTestCase {
         XCTAssertEqual(limits.validatedSize(CGSize(width: 1668, height: 2420)), CGSize(width: 1668, height: 2420))
         XCTAssertEqual(limits.validatedSize(CGSize(width: 4096, height: 2048)), CGSize(width: 4096, height: 2048))
         for size in [CGSize.zero, CGSize(width: -1, height: 2), CGSize(width: 4097, height: 1),
-                     CGSize(width: 4096, height: 4096), CGSize(width: .infinity, height: 1),
+                     CGSize(width: 4096, height: 4096), CGSize(width: CGFloat.infinity, height: 1),
                      CGSize(width: CGFloat.greatestFiniteMagnitude, height: 1)] {
             XCTAssertNil(limits.validatedSize(size))
         }
