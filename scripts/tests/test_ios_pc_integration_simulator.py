@@ -134,6 +134,63 @@ class PCIntegrationVerdictTests(unittest.TestCase):
         self.assertNotIn("-allowProvisioningUpdates", command)
 
 
+class GeneratedProjectTests(unittest.TestCase):
+    def project(self):
+        objects = {"root": {"mainGroup": "main", "targets": ["app", "tests"]},
+                   "main": {"isa": "PBXGroup", "sourceTree": "<group>", "children": []}}
+        inputs = {
+            "app": (runner.SCHEME, [runner.ROOT / path for path in runner.PRODUCTION_SOURCES] + [runner.SPEC.parent / "PCIntegrationApp.swift"]),
+            "tests": (runner.TEST_TARGET, [*runner.TEST_SOURCES.values(), runner.ROOT / "iOS/Tests/Support/IOSTestSupport.swift"]),
+        }
+        for target, (name, paths) in inputs.items():
+            phase = target + "-sources"
+            objects[target] = {"isa": "PBXNativeTarget", "name": name, "buildPhases": [phase]}
+            objects[phase] = {"isa": "PBXSourcesBuildPhase", "files": []}
+            for index, path in enumerate(paths):
+                ref, build = target + "-ref-" + str(index), target + "-build-" + str(index)
+                objects[ref] = {"isa": "PBXFileReference", "sourceTree": "SOURCE_ROOT", "path": str(path.resolve())}
+                objects[build] = {"fileRef": ref}
+                objects["main"]["children"].append(ref)
+                objects[phase]["files"].append(build)
+        return {"objects": objects, "rootObject": "root"}
+
+    def test_resolves_exact_existing_source_inputs(self):
+        result = runner.validate_generated_project(self.project(), runner.SPEC.parent)
+        self.assertEqual(len(result[runner.SCHEME]), 14)
+        self.assertEqual(len(result[runner.TEST_TARGET]), 3)
+
+    def test_rejects_doubled_external_group_path_before_simulator_creation(self):
+        project = self.project()
+        objects = project["objects"]
+        ref = "tests-ref-0"
+        objects["main"]["children"].remove(ref)
+        objects["main"]["children"].append("bad-group")
+        objects["bad-group"] = {"isa": "PBXGroup", "sourceTree": "<group>", "path": "../", "children": [ref]}
+        objects[ref].update(sourceTree="<group>", path="iOS/Tests/Unit/Export/PCConverterClientTests.swift")
+        with self.assertRaises(ValueError):
+            runner.validate_generated_project(project, runner.SPEC.parent)
+
+    def test_rejects_missing_duplicate_or_wrong_target_source(self):
+        for mode in ("missing", "duplicate", "wrong-target"):
+            project = self.project()
+            files = project["objects"]["tests-sources"]["files"]
+            if mode == "missing":
+                files.pop()
+            elif mode == "duplicate":
+                files.append(files[0])
+            else:
+                files[0] = "app-build-0"
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                runner.validate_generated_project(project, runner.SPEC.parent)
+
+    def test_failed_gate_never_claims_compilation_or_xctest_pass(self):
+        text = runner.report_summary({"verdict": "failed"})
+        self.assertIn("No compilation or XCTest pass is claimed", text)
+        self.assertNotIn("compiled unchanged", text)
+        passed = runner.report_summary({"verdict": "passed", "tests": {"passed": 19}})
+        self.assertIn("compiled unchanged", passed)
+
+
 class PCIntegrationOwnershipTests(unittest.TestCase):
     def test_accepts_only_our_new_uuid_and_exact_identity(self):
         state = owner()

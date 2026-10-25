@@ -284,3 +284,14 @@
 "scene.assets.error.insufficientSpace" = "儲存空間不足，無法暫存並保留共用素材。";
 "scene.assets.error.publication" = "無法完成共用素材安裝，已保留先前素材。";
 "scene.assets.error.rollback" = "共用素材取代失敗，復原需要處理。未刪除保留檔案。";
+"export.pc.assumedPixelAspect" = "來源未指定像素比例，因此以方形像素保留原始寬高比。";
+"scene.capture.notReady" = "原生場景尚未準備好擷取，請等待實際算繪影格。";
+"scene.capture.invalidSize" = "不支援要求的原生擷取尺寸。";
+"scene.capture.invalidResponse" = "原生算繪器傳回無效影格。";
+"scene.capture.imageUnavailable" = "無法解碼原生影格。";
+"scene.capture.timeout" = "原生算繪器未及時傳回影格。";
+"scene.capture.busy" = "已有原生擷取作業進行中。";
+"scene.capture.invalidTime" = "即時場景擷取無法跳至要求的時間。";
+"scene.capture.wrongSource" = "匯出需要實際原生場景影格來源。";
+"scene.capture.resolutionMismatch" = "擷取場景與要求的原生解析度不符，未匯出較低解析度替代品。";
+"scene.capture.tooSlow" = "即時場景擷取無法維持要求的時序，未改用較低影格率。";

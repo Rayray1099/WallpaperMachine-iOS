@@ -18,6 +18,7 @@ actor PCConverterClient {
         let outputURL: URL
         let byteSize: Int64
         let sha256: String
+        let sampleAspectRatioAssumed: Bool
     }
     struct State: Decodable { let jobs: [Job] }
     struct Job: Decodable {
@@ -32,6 +33,7 @@ actor PCConverterClient {
         var download_url: String?
         var bytes: Int64?
         var sha256: String?
+        var sample_aspect_ratio_assumed: Bool?
 
         func receipt() throws -> (bytes: Int64, sha256: String) {
             guard state == "done", let bytes, bytes > 0, bytes < 1_900_000_000,
@@ -157,7 +159,8 @@ actor PCConverterClient {
             try? FileManager.default.removeItem(at: destination)
             throw error
         }
-        return Receipt(outputURL: destination, byteSize: expected.bytes, sha256: hash)
+        return Receipt(outputURL: destination, byteSize: expected.bytes, sha256: hash,
+                       sampleAspectRatioAssumed: job.sample_aspect_ratio_assumed ?? false)
     }
 
     private func request(path: String, method: String = "GET", query: [URLQueryItem] = [], timeout: TimeInterval = 20) -> URLRequest {

@@ -120,6 +120,9 @@ struct PCConverterView: View {
                 if let receipt = model.receipt {
                     Section {
                         Text(text("export.pc.finished")).font(.footnote)
+                        if receipt.sampleAspectRatioAssumed {
+                            Text(text("export.pc.assumedPixelAspect")).font(.footnote).foregroundStyle(.secondary)
+                        }
                         Text(verbatim: ByteCountFormatter.string(fromByteCount: receipt.byteSize, countStyle: .file))
                         Label(text("export.pc.receipt"), systemImage: "checkmark.shield")
                         Text(verbatim: receipt.sha256).font(.caption2.monospaced()).textSelection(.enabled)

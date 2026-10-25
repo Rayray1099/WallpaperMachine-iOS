@@ -88,6 +88,78 @@ def source_manifest():
             for path in paths}
 
 
+def validate_generated_project(project, project_directory):
+    """Resolve PBX group paths, not just YAML declarations, before creating a simulator."""
+    objects = project["objects"]
+    root = objects[project["rootObject"]]
+    resolved = {}
+
+    def visit(identifier, parent, ancestors):
+        if identifier in ancestors:
+            raise ValueError("cyclic generated Xcode groups")
+        node = objects[identifier]
+        path = node.get("path", "")
+        tree = node.get("sourceTree", "<group>")
+        if tree == "<group>":
+            location = (parent / path).resolve()
+        elif tree == "SOURCE_ROOT":
+            location = (project_directory / path).resolve()
+        elif tree == "<absolute>":
+            location = Path(path).resolve()
+        else:
+            return  # SDK/framework/product references are not source inputs.
+        if node.get("isa") == "PBXFileReference":
+            if identifier in resolved and resolved[identifier] != location:
+                raise ValueError("ambiguous generated source reference")
+            resolved[identifier] = location
+        else:
+            for child in node.get("children", []):
+                visit(child, location, ancestors | {identifier})
+
+    visit(root["mainGroup"], project_directory, set())
+    expected = {
+        SCHEME: {(ROOT / path).resolve() for path in PRODUCTION_SOURCES} | {(SPEC.parent / "PCIntegrationApp.swift").resolve()},
+        TEST_TARGET: {path.resolve() for path in TEST_SOURCES.values()} | {(ROOT / "iOS/Tests/Support/IOSTestSupport.swift").resolve()},
+    }
+    actual = {}
+    for target_id in root["targets"]:
+        target = objects[target_id]
+        if target.get("isa") != "PBXNativeTarget":
+            continue
+        name = target["name"]
+        files = []
+        for phase_id in target.get("buildPhases", []):
+            phase = objects[phase_id]
+            if phase.get("isa") != "PBXSourcesBuildPhase":
+                continue
+            for build_id in phase.get("files", []):
+                reference = objects[build_id]["fileRef"]
+                if reference not in resolved:
+                    raise ValueError("unresolved generated Xcode source input")
+                files.append(resolved[reference])
+        if name not in expected or len(set(files)) != len(files) or set(files) != expected[name]:
+            raise ValueError("generated Xcode sources differ from actual closure for " + name + ": " + repr(list(map(str, files))))
+        if any(not path.is_file() for path in files):
+            raise ValueError("generated Xcode source input does not exist for " + name)
+        actual[name] = sorted(str(path.relative_to(ROOT)).replace("\\", "/") for path in files)
+    if set(actual) != set(expected):
+        raise ValueError("missing generated Xcode target")
+    return actual
+
+
+def report_summary(report):
+    passed = report.get("tests", {}).get("passed", 0)
+    native_passed = report.get("verdict") == "passed" and passed == sum(map(len, EXPECTED.values()))
+    compilation = ("Production SwiftUI/UIKit client/importer compiled unchanged; real CryptoKit, ZIPFoundation and XCTest."
+                   if native_passed else
+                   "Configured actual production sources; native compilation/test gate did not pass. No compilation or XCTest pass is claimed.")
+    return (f"## Native PC/shared-assets Apple XCTest: {report['verdict']}\n\n"
+            f"- Verified actual passed cases: {passed}; requires all 19, zero skips/failures.\n"
+            f"- {compilation}\n"
+            "- No remote upload/download, physical iPad, renderer, Flash or installation pass claimed.\n"
+            f"- Owned simulator cleanup: {report.get('cleanup', {}).get('status')}.\n")
+
+
 def inspect_results(summary, tree):
     required = {(cls, method) for cls, methods in EXPECTED.items() for method in methods}
     for key in ("passedTests", "failedTests", "skippedTests", "totalTestCount"):
@@ -238,6 +310,11 @@ def main(argv=None):
         runtime, device = select_simulator(inventory, sdk)
         report["simulator_pin"] = {"runtime": runtime, "device_type": device}
         runner.run("xcodegen", ["xcodegen", "generate", "--spec", str(SPEC), "--project", str(SPEC.parent)])
+        pbxproj = SPEC.parent / (SCHEME + ".xcodeproj") / "project.pbxproj"
+        raw, _ = runner.run("generated-project-json", ["plutil", "-convert", "json", "-o", "-", str(pbxproj)])
+        generated = json.loads(raw)
+        save(out / "generated-project.json", generated)
+        report["generated_source_inputs"] = validate_generated_project(generated, SPEC.parent)
         token = uuid.uuid4().hex
         owner = {"token": token, "name": OWNER_PREFIX + token, "runtime": runtime["identifier"],
                  "device_type": device["identifier"], "initial_udids": [row["udid"].upper() for _, row in device_rows(inventory)]}
@@ -282,11 +359,7 @@ def main(argv=None):
             report["verdict"] = "failed"
         report["commands"] = runner.steps
         save(out / "report.json", report)
-        summary = (f"## Native PC/shared-assets Apple XCTest: {report['verdict']}\n\n"
-                   f"- Actual passed cases: {report.get('tests', {}).get('passed', 0)}; requires all 19, zero skips/failures.\n"
-                   "- Production SwiftUI/UIKit client/importer compiled unchanged; real CryptoKit, ZIPFoundation and XCTest.\n"
-                   "- Offline helper/streamed-file tests only. No remote upload/download, physical iPad, renderer, Flash or installation pass claimed.\n"
-                   f"- Owned simulator cleanup: {report.get('cleanup', {}).get('status')}.\n")
+        summary = report_summary(report)
         (out / "summary.md").write_text(summary, encoding="utf-8")
         if os.environ.get("GITHUB_STEP_SUMMARY"):
             with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:

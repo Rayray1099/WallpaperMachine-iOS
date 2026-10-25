@@ -5,7 +5,8 @@ options:
   bundleIdPrefix: com.rayray1099.wallpapermachine
   deploymentTarget:
     iOS: "18.0"
-  createIntermediateGroups: true
+  # Explicit virtual groups avoid XcodeGen re-rooting ../Unit and ../Support twice.
+  createIntermediateGroups: false
 packages:
   ZIPFoundation:
     url: https://github.com/weichsel/ZIPFoundation.git
@@ -70,8 +71,11 @@ targets:
     platform: iOS
     sources:
       - path: ../Unit/Export/PCConverterClientTests.swift
+        group: NativeTests
       - path: ../Unit/Renderer/SceneSharedAssetsInstallerTests.swift
+        group: NativeTests
       - path: ../Support/IOSTestSupport.swift
+        group: NativeTests
     dependencies:
       - target: WMPCIntegrationHarness
       - package: ZIPFoundation

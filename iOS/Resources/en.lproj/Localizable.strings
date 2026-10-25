@@ -284,3 +284,14 @@
 "scene.assets.error.insufficientSpace" = "Not enough storage to stage and retain shared assets.";
 "scene.assets.error.publication" = "Shared assets could not be published. The previous assets were retained.";
 "scene.assets.error.rollback" = "Shared-asset replacement failed and recovery needs attention. Retained files were not deleted.";
+"export.pc.assumedPixelAspect" = "The source did not specify pixel aspect. Square pixels were assumed, preserving stored width:height.";
+"scene.capture.notReady" = "The native scene is not ready to capture. Wait for an actual rendered frame.";
+"scene.capture.invalidSize" = "The requested native capture size is unsupported.";
+"scene.capture.invalidResponse" = "The native renderer returned an invalid frame.";
+"scene.capture.imageUnavailable" = "The native frame could not be decoded.";
+"scene.capture.timeout" = "The native renderer did not return a frame in time.";
+"scene.capture.busy" = "A native capture is already in progress.";
+"scene.capture.invalidTime" = "Live scene capture cannot seek to the requested time.";
+"scene.capture.wrongSource" = "Export requires an actual native scene frame source.";
+"scene.capture.resolutionMismatch" = "The captured scene does not match the requested native resolution. No lower-resolution replacement was exported.";
+"scene.capture.tooSlow" = "Live scene capture could not maintain the requested timing. No lower frame rate was substituted.";
