@@ -1,0 +1,2 @@
+URL: https://raw.githubusercontent.com/jam1garner/binread/master/LICENSE
+SHA-256: 08159509fe99d146416fe110053a7360ddfccbba5f0c8f955bdbda025d4d2a20

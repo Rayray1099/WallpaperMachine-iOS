@@ -185,17 +185,24 @@ def generate(output: Path, deps_sources: Path, cargo_home: Path, zipfoundation: 
         packages.extend(run_metadata(steam_manifest, target, cargo, cargo_tree_runner, package="wm-steam-transport"))
     # Merge the two target closures by exact crate identity before writing files.
     packages = list({(package["name"], package["version"]): package for package in packages}.values())
+    missing_notices: list[str] = []
     for package in packages:
         # Workspace-owned packages are not third-party dependencies.
         if package.get("name") in {"wm-shader", "wallpaper-core", "wallpaper-bridge", "wm-steam-transport"}:
             continue
-        sources = crate_licenses(package, cargo_home)
+        try:
+            sources = crate_licenses(package, cargo_home)
+        except NoticeError as error:
+            missing_notices.append(f"{package['name']} {package['version']}: {error}")
+            continue
         declared = package.get("license") or "(license not declared)"
         for source in sources:
             dest = f"rust/{package['name']}-{package['version']}/{source.name}"
             add_copy(output, source, dest, index)
         crate_entries.append(f"{package['name']} {package['version']} [{declared}] authors={package.get('authors', [])!r} repository={package.get('repository')!r}")
 
+    if missing_notices:
+        raise NoticeError("missing required crate notices:\n" + "\n".join(missing_notices))
     for zip_license in find_licenses(zipfoundation, ("LICENSE", "COPYING")):
         add_copy(output, zip_license, f"zipfoundation/{zip_license.name}", index)
     index_text = "iOS third-party license texts\n\n" + "\n".join(index) + "\n\n"

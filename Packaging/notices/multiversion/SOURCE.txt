@@ -1,0 +1,2 @@
+URL: https://raw.githubusercontent.com/calebzulawski/multiversion/master/LICENSE-MIT
+SHA-256: 3c92a19e541755a97e51b4c963aa4335bbf93b64574dfbc36a5636c2899f3ab9

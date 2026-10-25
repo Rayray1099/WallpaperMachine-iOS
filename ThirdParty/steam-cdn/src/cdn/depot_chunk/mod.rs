@@ -61,7 +61,10 @@ mod tests {
         let plain = archive_with_oversized_member();
         let key = [7u8; 32];
         let iv = [9u8; 16];
-        let ciphertext = AesCbcEnc::new(&key.into(), &iv.into()).encrypt_padded_vec_mut::<Pkcs7>(&plain);
+        let mut padded = vec![0u8; plain.len() + 16];
+        padded[..plain.len()].copy_from_slice(&plain);
+        let ciphertext = AesCbcEnc::new(&key.into(), &iv.into())
+            .encrypt_padded_mut::<Pkcs7>(&mut padded, plain.len()).unwrap().to_vec();
         let mut encrypted_iv = iv.into();
         aes::Aes256::new(&key.into()).encrypt_block(&mut encrypted_iv);
         let mut encrypted = encrypted_iv.to_vec();

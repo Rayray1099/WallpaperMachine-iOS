@@ -1,0 +1,2 @@
+URL: https://static.crates.io/crates/binwrite/binwrite-0.2.1.crate
+SHA-256: 42c3da1db1f384ad643e27cb6ba4f08f2a7cd8753bef8dd95c39fe45d7a474c8

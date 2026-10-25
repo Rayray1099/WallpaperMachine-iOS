@@ -1,0 +1,2 @@
+URL: https://static.crates.io/crates/binwrite_derive/binwrite_derive-0.2.1.crate
+SHA-256: 476f17c19ce04226ba997c229ce8fb96eaef1c0e0745ec91d8df35f723aae353

@@ -1,0 +1,2 @@
+URL: https://static.crates.io/crates/another-steam-totp/another-steam-totp-0.3.5.crate
+SHA-256: b715a03df75182a2606fa6e70e649196f9d57359e4adde4eb48ea2ed6788c7ec

@@ -29,6 +29,8 @@ jobs:
           set -o pipefail
           mkdir -p artifacts/ios-steam
           cargo test --manifest-path iOS/SteamTransport/Cargo.toml --locked 2>&1 | tee artifacts/ios-steam/native-test.log
+          cargo metadata --manifest-path iOS/SteamTransport/Cargo.toml --locked --format-version 1 > artifacts/ios-steam/cargo-metadata.json
+          cargo tree --manifest-path iOS/SteamTransport/Cargo.toml --locked --target aarch64-apple-ios --edges normal --prefix none -f '{p}|{l}' > artifacts/ios-steam/linked-crates.txt
       - name: Test bounded CDN parsers without live accounts
         run: |
           set -o pipefail

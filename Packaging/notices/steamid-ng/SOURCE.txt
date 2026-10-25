@@ -1,0 +1,2 @@
+URL: https://static.crates.io/crates/steamid-ng/steamid-ng-1.0.0.crate
+SHA-256: ffb049f8faa2cba570c5366dbaf88ee5849725b16edb771848639fac92e33673
