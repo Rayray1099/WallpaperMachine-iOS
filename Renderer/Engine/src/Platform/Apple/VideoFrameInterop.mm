@@ -3,7 +3,6 @@
 #include "Utils/Logging.h"
 
 #include <CoreVideo/CoreVideo.h>
-#include <IOSurface/IOSurface.h>
 
 #include <algorithm>
 #include <cctype>
