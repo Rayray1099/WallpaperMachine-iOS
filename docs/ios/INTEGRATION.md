@@ -42,6 +42,14 @@ Native pre-admission source/mount/document/property failures are published throu
 
 The old empty package is an import-only negative rendering fixture: no material means no Metal shader translation attempt, which native admission refuses. `python3 scripts/ios/make_native_scene_fixture.py --output <new-folder>` instead generates a wholly self-authored packaged quad, shader pair and RGBA texture with no shared-asset dependencies. Its native test checks actual detached GPU pixels when Metal is available, not iPad presentation. `frames_presented > 0` remains the iOS readiness gate; the native first-frame callback also settles some upstream failures and must not be used as proof of rendering.
 
+## Scene host lifecycle and geometry
+
+Native surface width/height and `CAMetalLayer.drawableSize` are **physical pixels**, derived from point bounds × the attached screen's scale. Internal quality does not shrink that output or change the script-visible screen resolution; the host uses the actual native render-scale setter (`.25...1`) before the initial scene config and on changes. Legacy surface render-width/height fields alone do not resize Metal's targets. Geometry validation rounds once, enforces the ABI's 1...65535 bounds and rejects nonfinite/overflowing conversions. A pure Foundation value captures bounds, screen scale and quality; surface replacement runs only when output pixels/scale change. Equal-bounds display-scale changes schedule layout explicitly.
+
+The host defers native allocation/reconfiguration until attached with positive bounds; a collapsed/detached surface pauses and keeps settings pending. A changed URL shuts down the old native handle and starts a new session, resetting geometry, caches, startup budget and diagnostics. Same-URL settings changes do not restart or clear a terminal failure. Explicit C-ABI failures preserve the first error and shut down; health reads cannot hide it using a previous frame count. Teardown before first layout blocks late allocation.
+
+The generic no-frame deadline now counts **15 cumulative eligible monotonic seconds**, only while active, attached and positive-sized. Paused/offscreen time does not consume that budget; backend failure reasons remain immediately visible. This is neither a callback-based readiness shortcut nor an unlimited retry policy: only actual `frames_presented > 0` clears loading/no-frame status. Foundation regressions exercise geometry, monotonic timing and session state directly; UIKit lifecycle/native ordering and physical iPad behavior still require runtime verification.
+
 ## Build/renderer agreement
 
 The device build uses SDK `iphoneos`, deployment floor 18.0, architecture `arm64` and Rust target `aarch64-apple-ios`. `iOS/Generated/Renderer` is the single output root; older `build/ios/renderer` and UniFFI proposals are obsolete.

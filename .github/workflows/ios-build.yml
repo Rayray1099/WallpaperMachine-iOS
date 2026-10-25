@@ -86,6 +86,18 @@ jobs:
             -o "${RUNNER_TEMP}/wm-ios-scene-resource-tests"
           "${RUNNER_TEMP}/wm-ios-scene-resource-tests" | tee "${IOS_ARTIFACTS}/scene-resource-tests.log"
 
+      - name: Test scene host geometry, session and eligible startup time
+        run: |
+          set -euo pipefail
+          for entry in 'SceneSurfaceGeometry:test_scene_geometry' 'SceneHostSession:test_scene_session' 'SceneStartupWait:test_scene_startup_wait'; do
+            source="${entry%%:*}"
+            harness="${entry#*:}"
+            xcrun swiftc -swift-version 5 -warnings-as-errors -parse-as-library \
+              "iOS/Sources/Renderer/${source}.swift" "scripts/ios/${harness}.swift" \
+              -o "${RUNNER_TEMP}/wm-ios-${harness}"
+            "${RUNNER_TEMP}/wm-ios-${harness}" | tee "${IOS_ARTIFACTS}/${harness}.log"
+          done
+
       - name: Build renderer and unsigned app
         run: python3 scripts/ios/build.py --artifacts-dir "${IOS_ARTIFACTS}"
 

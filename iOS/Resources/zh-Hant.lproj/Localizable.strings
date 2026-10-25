@@ -65,6 +65,9 @@
 "preview.next" = "下一張桌布";
 "preview.previous" = "上一張桌布";
 "scene.resources.unavailable" = "無法準備場景的共用素材資料夾。請檢查 App 的可用儲存空間後再試一次。";
+"scene.renderer.unavailable" = "無法啟動原生場景算繪器。";
+"scene.surface.invalid" = "場景表面的尺寸或縮放比例無效。";
+"scene.health.unavailable" = "無法讀取原生場景算繪器的運作狀態。";
 
 "inspector.details" = "詳細資料";
 "inspector.kind" = "類型";

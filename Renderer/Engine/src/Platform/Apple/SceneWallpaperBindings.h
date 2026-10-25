@@ -49,7 +49,9 @@ int owe_scene_wallpaper_delete(owe_scene_wallpaper* scene);
 int owe_scene_wallpaper_init(owe_scene_wallpaper* scene);
 int owe_scene_wallpaper_shutdown(owe_scene_wallpaper* scene);
 
-/* The drawing surface: the CAMetalLayer, its size in points and the size to render at. */
+/* The drawing surface: CAMetalLayer and physical output pixel dimensions (not points).
+   display_scale_factor relates these pixels to logical points. render_width/height are
+   legacy requested render dimensions; use set_render_scale for Metal target quality. */
 int owe_scene_wallpaper_init_metal(
     owe_scene_wallpaper* scene,
     void* metal_layer,
