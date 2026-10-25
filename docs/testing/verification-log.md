@@ -25,6 +25,16 @@ and moves whatever falls past ten verbatim into a monthly file under
 [archive/](archive/); promote anything durable before it goes. Editing an
 entry's recorded result is not allowed.
 
+## 2026-10-25 — iOS physical geometry and scene host lifecycle
+
+- Source92fdedc9: physical output pixels independent of .25...1 native render quality; real set_render_scale before config; URL replacement with fresh session; deferred detached/collapsed work; first-error host shutdown latch; eligible monotonic first-frame wait, no fake readiness.
+- Actual Windows Swift5-mode/warnings-as-errors execution:145 geometry+119 timing+21 session checks=285PASS. Reproduced old2x/3x point/pixel and quality-scaled drawable mismatch. Host frontend parse passed syntax only.
+- Actual macOS ARM64 Release40192791966 PASS with Xcode26.3/iPhoneOSSDK26.2/iOS18.0floor. All285helperchecks actually executed and passed on macOS, plus32resource+21pathchecks; full native/Steam/Swift/notices/package validation PASS. Simulator XCTest explicitly deferred.
+- Original unsigned IPA11805758B SHA25691b0227b375e388b6e245d0b9ec9bf2412cb12b986fbec836c74fe3f2f56aaa8, source92fdedc957807d58fe75e0d84f1f8b0e8b1adf8b; not injected/signed/installed. Prior30a48125original and evidence preserved.
+- Native macOS40192791935 PASS56/0skipped:3async loader+25containerCPU and13failure/recovery+14synthetic+1packedquadGPU;17fixture/verdictPythonchecks alsoPASS. Private process-owned textures/layers/null audio, not UIKit lifecycle execution.
+- Offline122iOSQA119pass3licenseinputskips;17fixture/verdictregressionspass;matching213unique nonempty keys inboth shipped catalogs. Scope-reviewed checked-return/pointer lifetime, handle cache reset and backend-error priority; no per-frame loop/timer added.
+- User remains away: no iPad/RPC/probes, GUI/desktop/VM/audiohardware, signing/install, secret access, AirCard Flash/system writes or respring. Physical sceneA→B, rotation/scale, background timing and native first-frame confirmation still deferred; no WallpaperEngine reference comparison.
+
 ## 2026-10-25 — iOS scene startup prerequisites and native load diagnostics
 
 - Source 30a48125: prepare mandatory empty SharedAssets before native allocation; optional cache; preserve startup errors. Native early failures publish sanitized Prepare reasons without frame credit, and failed replacements stay blocked across resize until a successful commit.
@@ -125,12 +135,3 @@ Space mode reworked: wallpaper windows of a display in the mode stay on its curr
 - Panel: card switch, desktop strip, chooser popover and the toolbar's toggle and "· Desktop 1" label rendered as intended
 - Gap: ad-hoc test builds ask again for System Audio Recording; an audio-responsive scene's first frame waits for the answer (6.4 s and 180 s stalls seen); a pixiv keychain prompt was denied
 - Not checked live: Apply assigning the current desktop (unit-tested), chooser search typing, multiple displays with separate Spaces, web/video on a pinned display, VoiceOver
-
-## 2026-10-24 — Daily active count (DAU/MAU) without an install id
-
-- App: TelemetryActiveCount sends one ping per UTC day to /api/telemetry/active (random per-day ping id, day, version, source, monthFirst); hourly retry with the same ping, next send 0-15 min after UTC midnight; no count with WALLPAPER_MACHINE_HOME or a defaults suite.
-- python3 scripts/test.py --only TelemetryActiveCountTests --only TelemetryClientTests --only TelemetryServiceTests: 18 passed, 0 failed.
-- python3 scripts/test.py (full gate, worktree): Python script tests OK; native 4062 passed, 0 failed, 47 skipped; 1 runtime warning (main-thread call), not traced to this change and not baselined.
-- Website (separate repo, branch feat/telemetry-active-count): npm run typecheck OK; local wrangler dev on a scratch D1 with migration 0002: retries (same and lowercase ping) counted once, a day-behind clock kept its day, a far-off clock took the arrival day, bad schema/ping/day/agent 400, cron prune kept 400-day totals and 2-day pings.
-- Dashboard DAU/MAU SQL run on the scratch D1 gave the expected sums; the page's new section was not viewed in a browser (owner sign-in needed).
-- Not done: no D1 remote migration, no Worker deploy, no app Release build, no desktop run.
