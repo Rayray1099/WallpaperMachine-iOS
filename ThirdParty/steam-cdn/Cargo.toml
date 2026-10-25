@@ -93,3 +93,6 @@ version = "2.2"
 
 [dependencies.serde_json]
 version = "1.0"
+
+[dependencies.zstd]
+version = "0.13"

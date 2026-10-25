@@ -29,7 +29,7 @@ pub async fn decompress(data: &[u8]) -> Result<Vec<u8>, Error> {
         return Err(Error::Eof("expecting VZ header".to_string()));
     }
 
-    if cursor.get_ref().len() < VZ_HEADER_LENGTH + VZ_FOOTER_LENGTH {
+    if cursor.get_ref().len() < VZ_HEADER_LENGTH + 5 + VZ_FOOTER_LENGTH {
         return Err(Error::Eof("truncated VZ stream".into()));
     }
     let mut properties = [0u8; 5];
@@ -98,8 +98,11 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_truncated_vz_header_without_panicking() {
-        let truncated = [0x56, 0x5a, b'a'];
-        assert!(decompress(&truncated).await.is_err());
+        for length in 3..22 {
+            let mut truncated = vec![0; length];
+            truncated[..3].copy_from_slice(b"VZa");
+            assert!(decompress(&truncated).await.is_err(), "accepted length {length}");
+        }
     }
 
     #[tokio::test]

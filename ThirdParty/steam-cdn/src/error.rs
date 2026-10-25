@@ -29,6 +29,16 @@ pub enum Error {
     Manifest(#[from] ManifestError),
     #[error("unexpected none")]
     NoneOption,
+    #[error("chunk decryption failed")]
+    ChunkDecrypt,
+    #[error("unsupported chunk compression")]
+    ChunkFormat,
+    #[error("chunk decompression failed")]
+    ChunkDecompress,
+    #[error("chunk size mismatch")]
+    ChunkSize,
+    #[error("chunk checksum mismatch")]
+    ChunkChecksum,
 }
 
 impl From<JoinError> for Error {

@@ -128,7 +128,7 @@ impl ManifestFile {
             validate_chunk_offset(expected_offset, chunk.offset)?;
             let data = self.inner.get_chunk(self.depot_id, depot_key, chunk.id()).await?;
             if data.len() != chunk.original_size as usize || data.len() > 4 * 1024 * 1024 {
-                return Err(Error::Unexpected("invalid downloaded chunk length".into()));
+                return Err(Error::ChunkSize);
             }
             expected_offset = expected_offset.checked_add(data.len() as u64)
                 .ok_or_else(|| Error::Unexpected("file chunk offset overflow".into()))?;

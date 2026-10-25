@@ -29,7 +29,10 @@ enum WorkshopContentDiagnostics {
         case "unsafe_manifest_path", "manifest_symlink_refused", "duplicate_manifest_path", "manifest_hash_missing",
              "verify_failed", "file_size_mismatch", "file_hash_mismatch": category = "integrity"
         case "content_too_large": category = "size"
-        case "chunk_download_failed": category = "transfer"
+        case "chunk_http_401", "chunk_http_403", "chunk_http_404", "chunk_http_429", "chunk_http_5xx",
+             "chunk_http_failed", "chunk_request_failed", "chunk_decrypt_failed", "chunk_format_unsupported",
+             "chunk_decompress_failed", "chunk_size_mismatch", "chunk_checksum_mismatch", "chunk_write_failed",
+             "chunk_download_failed": category = "transfer"
         case "busy", "already_signed_in": category = "busy"
         case "native_failure", "invalid_operation", "unknown_task": category = "generic"
         default: return Failure(localizationKey: "workshop.native.error.generic", code: nil)

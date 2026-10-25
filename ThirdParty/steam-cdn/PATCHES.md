@@ -33,6 +33,19 @@ Security modifications:
   reject `unavailable`, `none` and unknown values. Server selection skips entries
   without HTTPS or an allowed Steam CDN host; requests never fall back to HTTP.
 
+- Support Steam's `VSZa` Zstd chunk wrapper in addition to legacy `VZa` LZMA
+  and PK ZIP. Framing was checked against the public SteamKit `VZstdUtil`
+  protocol implementation; no reference implementation was copied. Use the
+  existing locked zstd 0.13 dependency (already linked/noticed via zip), not a
+  handwritten decompressor. Bound output to 4 MiB and decoder window to 64 MiB;
+  verify exact output size and wrapper CRC32. Typed chunk errors distinguish
+  malformed encryption, unsupported compression, decompression, size and checksum.
+- Guard AES helper ciphertext length before slicing (also protects encrypted
+  manifest filenames), and require all 7 header + 5 property + 10 footer bytes
+  before LZMA body-length subtraction. Offline regressions cover every short
+  malformed length, encrypted ZIP/LZMA/Zstd positive paths, bad keys/formats,
+  malformed Zstd framing/size/CRC and oversized decoder windows.
+
 The bounded limits, Steam-host matching, fractional directory JSON, numeric
 ordering/invalid scores and explicit HTTPS capabilities have offline unit checks
 in the crate; there is intentionally no network test. `serde_json` is declared

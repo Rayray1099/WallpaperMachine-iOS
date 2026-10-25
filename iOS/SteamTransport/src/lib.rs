@@ -176,6 +176,23 @@ async fn workshop_depot(connection: &Connection) -> Result<u32, &'static str> {
     let depot = depots.get("workshopdepot").and_then(|v| v.first()).ok_or("workshop_depot_missing")?.to_string().trim_matches('"').parse::<u32>().map_err(|_| "workshop_depot_missing")?;
     if depot == 0 { return Err("workshop_depot_missing"); } Ok(depot)
 }
+fn chunk_failure(error: steam_cdn::Error) -> &'static str {
+    use steam_cdn::Error;
+    match error {
+        Error::HttpStatus(status) => match status.as_u16() {
+            401 => "chunk_http_401", 403 => "chunk_http_403", 404 => "chunk_http_404",
+            429 => "chunk_http_429", 500..=599 => "chunk_http_5xx", _ => "chunk_http_failed",
+        },
+        Error::Request(_) | Error::Network(_) => "chunk_request_failed",
+        Error::ChunkDecrypt => "chunk_decrypt_failed",
+        Error::ChunkFormat => "chunk_format_unsupported",
+        Error::ChunkDecompress | Error::Decompress(_) => "chunk_decompress_failed",
+        Error::ChunkSize => "chunk_size_mismatch",
+        Error::ChunkChecksum => "chunk_checksum_mismatch",
+        Error::Io(_) => "chunk_write_failed",
+        _ => "chunk_download_failed",
+    }
+}
 async fn download(job: &Arc<Job>, req: &Request) -> Result<(), &'static str> {
     let id = item_id(&req.item_id).ok_or("invalid_item_id")?;
     let root = PathBuf::from(&req.destination);
@@ -217,7 +234,7 @@ async fn download(job: &Arc<Job>, req: &Request) -> Result<(), &'static str> {
         if let Some(parent) = path.parent() { tokio::fs::create_dir_all(parent).await.map_err(|_| "write_failed")?; }
         let output = tokio::fs::OpenOptions::new().write(true).create_new(true).open(&path).await.map_err(|_| "write_failed")?;
         let mut writer = ProgressWriter { file: output, job: job.clone(), limit: file.size(), written: 0 };
-        file.download(key, &mut writer, Some(2)).await.map_err(|_| "chunk_download_failed")?;
+        file.download(key, &mut writer, Some(2)).await.map_err(chunk_failure)?;
         writer.flush().await.map_err(|_| "write_failed")?;
         if writer.written != file.size() { return Err("file_size_mismatch"); } drop(writer);
         let mut input = tokio::fs::File::open(&path).await.map_err(|_| "verify_failed")?;
@@ -241,6 +258,18 @@ impl AsyncWrite for ProgressWriter {
 }
 #[cfg(test)] mod tests {
     use super::*;
+    #[test] fn chunk_errors_never_expose_remote_or_io_details() {
+        use steam_cdn::Error;
+        for error in [Error::Request("https://secret.invalid/?token=private".into()), Error::Network("private".into())] {
+            assert_eq!(chunk_failure(error), "chunk_request_failed");
+        }
+        assert_eq!(chunk_failure(Error::ChunkDecrypt), "chunk_decrypt_failed");
+        assert_eq!(chunk_failure(Error::ChunkFormat), "chunk_format_unsupported");
+        assert_eq!(chunk_failure(Error::ChunkDecompress), "chunk_decompress_failed");
+        assert_eq!(chunk_failure(Error::ChunkSize), "chunk_size_mismatch");
+        assert_eq!(chunk_failure(Error::ChunkChecksum), "chunk_checksum_mismatch");
+        assert_eq!(chunk_failure(Error::Io(std::io::Error::other("private path"))), "chunk_write_failed");
+    }
     #[test] fn ids_are_positive_canonical_uint64() { assert_eq!(item_id("42"), Some(42)); for s in ["", "0", "01", "4x", "18446744073709551616"] { assert!(item_id(s).is_none()); } }
     #[test] fn manifest_paths_stay_relative() { assert_eq!(safe_path("materials/test.png").unwrap(), PathBuf::from("materials/test.png")); for p in ["../x", "/x", "C:/x", "a/../b", "a//b", ".", "a/./b", "a\0b", "a\\..\\x"] { assert!(safe_path(p).is_err(), "{p}"); } }
     #[test] fn polling_never_serializes_credentials() { let job = Job::new(); job.fail("login_rejected"); let s = serde_json::to_string(&*job.status.lock().unwrap()).unwrap(); assert!(!s.contains("password")); assert!(!s.contains("account")); assert!(job.terminal()); }

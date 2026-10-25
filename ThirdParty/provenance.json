@@ -9,7 +9,7 @@
     "license": "Apache-2.0",
     "directory": "ThirdParty/steam-cdn",
     "modified": true,
-    "note": "Exact published crate source copied from artifacts/ios-workshop/crates/steam-cdn-1.0.0; license notice preserved. Security hardening, fractional CDN weighted-load schema compatibility, explicit HTTPS-capability selection and offline regression coverage are documented in ThirdParty/steam-cdn/PATCHES.md."
+    "note": "Exact published crate source copied from artifacts/ios-workshop/crates/steam-cdn-1.0.0; license notice preserved. Security hardening, fractional CDN weighted-load schema compatibility, explicit HTTPS-capability selection, bounded Steam VSZa Zstd chunk decoding, malformed AES/LZMA length guards and offline regression coverage are documented in ThirdParty/steam-cdn/PATCHES.md."
   },
   "mediaRemoteAdapter": {
     "repository": "https://github.com/ungive/mediaremote-adapter",
