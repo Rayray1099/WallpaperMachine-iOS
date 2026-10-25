@@ -75,6 +75,8 @@ LZ4_DIR="lz4-${LZ4_VERSION}"
 NLOHMANN_VERSION="3.12.0"
 NLOHMANN_SHA256="aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63"
 NLOHMANN_URL="https://github.com/nlohmann/json/releases/download/v${NLOHMANN_VERSION}/json.hpp"
+NLOHMANN_FWD_SHA256="fb6aa70cbece087f37ab4685c182b287c53be54f785f981b9db9d30d2d028b37"
+NLOHMANN_FWD_URL="https://github.com/nlohmann/json/releases/download/v${NLOHMANN_VERSION}/json_fwd.hpp"
 
 ARGPARSE_VERSION="3.2"
 ARGPARSE_TAG="v${ARGPARSE_VERSION}"
@@ -398,6 +400,7 @@ extract_if_needed() {
 install_header_only_configs() {
   mkdir -p "${DEPS_PREFIX}/include/nlohmann"
   cp "${DEPS_DOWNLOADS}/json.hpp" "${DEPS_PREFIX}/include/nlohmann/json.hpp"
+  cp "${DEPS_DOWNLOADS}/json_fwd.hpp" "${DEPS_PREFIX}/include/nlohmann/json_fwd.hpp"
   mkdir -p "${DEPS_PREFIX}/include"
   cp -R "${DEPS_SOURCES}/${ARGPARSE_DIR}/include/." "${DEPS_PREFIX}/include/"
 
@@ -507,6 +510,7 @@ if [ "${BUILD_DEPS}" = "true" ]; then
   download "${FREETYPE_URL}" "freetype-${FREETYPE_VERSION}.tar.gz" "${FREETYPE_SHA256}"
   download "${LZ4_URL}" "lz4-${LZ4_VERSION}.tar.gz" "${LZ4_SHA256}"
   download "${NLOHMANN_URL}" "json.hpp" "${NLOHMANN_SHA256}"
+  download "${NLOHMANN_FWD_URL}" "json_fwd.hpp" "${NLOHMANN_FWD_SHA256}"
   download "${ARGPARSE_URL}" "argparse-${ARGPARSE_VERSION}.tar.gz" "${ARGPARSE_SHA256}"
 
   extract_if_needed "${DEPS_DOWNLOADS}/quickjs-${QUICKJS_VERSION}.tar.gz" "${QUICKJS_DIR}"
