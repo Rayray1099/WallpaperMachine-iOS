@@ -24,6 +24,15 @@ enum WorkshopPaths {
 /// Fetches the bytes of a Workshop preview image; injected so tests never reach the network.
 protocol WorkshopThumbnailFetching: Sendable {
     func fetch(_ url: URL) async throws -> Data
+    func fetch(
+        _ url: URL, progress: @escaping @Sendable (Int64, Int64) -> Void
+    ) async throws -> Data
+}
+
+extension WorkshopThumbnailFetching {
+    func fetch(_ url: URL, progress: @escaping @Sendable (Int64, Int64) -> Void) async throws -> Data {
+        try await fetch(url)
+    }
 }
 
 struct WorkshopThumbnailFailure: LocalizedError, Equatable, Sendable {
@@ -97,6 +106,12 @@ struct URLSessionThumbnailFetcher: WorkshopThumbnailFetching, @unchecked Sendabl
     }
 
     func fetch(_ url: URL) async throws -> Data {
+        try await fetch(url, progress: { _, _ in })
+    }
+
+    func fetch(
+        _ url: URL, progress: @escaping @Sendable (Int64, Int64) -> Void
+    ) async throws -> Data {
         guard Self.isPermitted(url) else {
             throw WorkshopThumbnailFailure(code: .unsupportedHost)
         }
@@ -106,6 +121,9 @@ struct URLSessionThumbnailFetcher: WorkshopThumbnailFetching, @unchecked Sendabl
         do {
             let (bytes, response) = try await transportSession.bytes(for: request)
             defer { bytes.task.cancel() }
+            guard let finalURL = response.url, Self.isPermitted(finalURL) else {
+                throw WorkshopThumbnailFailure(code: .unsupportedHost)
+            }
             if let http = response as? HTTPURLResponse,
                !(200..<300).contains(http.statusCode) {
                 throw WorkshopThumbnailFailure(code: .httpStatus(http.statusCode))
@@ -116,14 +134,30 @@ struct URLSessionThumbnailFetcher: WorkshopThumbnailFetching, @unchecked Sendabl
             var data = Data()
             data.reserveCapacity(
                 Int(max(0, min(response.expectedContentLength, Int64(byteLimit)))))
+            var lastPublished: Int64 = 0
             for try await byte in bytes {
-                if data.count.isMultiple(of: 65_536) { try Task.checkCancellation() }
+                if data.count.isMultiple(of: Int(WorkshopPreviewProgress.updateIntervalBytes)) {
+                    try Task.checkCancellation()
+                }
                 guard data.count < byteLimit else {
                     throw WorkshopThumbnailFailure(code: .tooLarge)
                 }
                 data.append(byte)
+                let received = Int64(data.count)
+                let expected = response.expectedContentLength
+                if WorkshopPreviewProgress.shouldPublish(
+                    received: received, lastPublished: lastPublished, expected: expected) {
+                    lastPublished = received
+                    progress(received, expected)
+                }
             }
             try Task.checkCancellation()
+            let finalReceived = Int64(data.count)
+            if finalReceived > lastPublished {
+                progress(
+                    finalReceived,
+                    response.expectedContentLength > 0 ? response.expectedContentLength : -1)
+            }
             return data
         } catch is CancellationError {
             throw WorkshopThumbnailFailure(code: .cancelled)
@@ -227,7 +261,10 @@ actor WorkshopThumbnailCache {
     /// A larger still for the detail sheet. The grid's 512-pixel still is plenty for a tile
     /// but soft at full width; this one is made from the same original only when a detail
     /// view asks for it, and shares the cache's pruning budget.
-    func largeThumbnail(for previewURL: URL) async throws -> Data {
+    func largeThumbnail(
+        for previewURL: URL,
+        progress: @escaping @Sendable (Int64, Int64) -> Void = { _, _ in }
+    ) async throws -> Data {
         let file = largeFileURL(for: previewURL)
         if let cached = Self.cached(file) { return cached }
         let key = file.lastPathComponent
@@ -237,7 +274,7 @@ actor WorkshopThumbnailCache {
         let task = Task<Data, Error> {
             await acquireSlot(.still)
             do {
-                let source = try await fetcher.fetch(previewURL)
+                let source = try await fetcher.fetch(previewURL, progress: progress)
                 guard source.count <= sourceByteLimit else {
                     throw WorkshopThumbnailFailure(code: .tooLarge)
                 }

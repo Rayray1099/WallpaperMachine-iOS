@@ -160,4 +160,12 @@
 "context.unfavorite" = "Remove from Favorites";
 
 "workshop.title" = "Workshop";
+"workshop.preview.failed" = "Author preview failed to load.";
+"workshop.preview.retry" = "Retry";
+"workshop.preview.downloading" = "Downloading…";
+"workshop.preview.noPreview" = "No author preview";
+"workshop.preview.authorStill" = "Author-provided still preview";
+"workshop.preview.authorAnimation" = "Animated author preview";
+"workshop.preview.playAnimation" = "Play author-provided animation";
+"workshop.preview.stillOnly" = "Still author preview only";
 "export.title" = "Export";

@@ -160,4 +160,12 @@
 "context.unfavorite" = "移出我的最愛";
 
 "workshop.title" = "工作坊";
+"workshop.preview.failed" = "作者預覽載入失敗。";
+"workshop.preview.retry" = "重試";
+"workshop.preview.downloading" = "正在下載…";
+"workshop.preview.noPreview" = "沒有作者預覽";
+"workshop.preview.authorStill" = "作者提供的靜態預覽";
+"workshop.preview.authorAnimation" = "作者提供的動態預覽";
+"workshop.preview.playAnimation" = "播放作者提供的動態預覽";
+"workshop.preview.stillOnly" = "僅有作者提供的靜態預覽";
 "export.title" = "匯出";

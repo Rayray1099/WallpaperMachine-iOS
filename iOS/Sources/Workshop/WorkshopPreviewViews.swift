@@ -55,23 +55,51 @@ struct WorkshopLargePreview: View {
     @State private var animation: UIImage?
     @State private var isLoadingAnimation = false
     @State private var animationUnavailable = false
+    @State private var stillFailed = false
+    @State private var stillProgress: Double?
+    @State private var stillReceivedBytes: Int64?
+    @State private var stillRetryID = 0
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             Color(uiColor: .secondarySystemBackground)
             if let animation {
                 AnimatedUIImageView(image: animation)
-                    .accessibilityLabel(WS("Animated Workshop preview", "工作坊動態預覽"))
+                    .accessibilityLabel(WS("Animated author preview", "作者提供的動態預覽"))
             } else if let still {
                 Image(uiImage: still)
                     .resizable()
                     .scaledToFit()
-                    .accessibilityLabel(WS("Workshop preview", "工作坊預覽"))
+                    .accessibilityLabel(WS("Author-provided still preview", "作者提供的靜態預覽"))
+            } else if item.previewURL != nil, stillFailed {
+                VStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.title2)
+                    Text(WS("Author preview failed to load.", "作者預覽載入失敗。"))
+                    Button(WS("Retry", "重試")) { stillRetryID += 1 }
+                        .buttonStyle(.bordered)
+                }
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("wm.workshop.preview-failed")
             } else if item.previewURL != nil {
-                ProgressView()
+                VStack(spacing: 8) {
+                    if let fraction = stillProgress {
+                        ProgressView(value: fraction)
+                        Text(WS("Downloading…", "正在下載…"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if let bytes = stillReceivedBytes {
+                        Text(String(format: WS("Received %lld bytes", "已接收 %lld 位元組"), bytes))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ProgressView()
+                    }
+                }
+                .padding()
             } else {
                 ContentUnavailableView(
-                    WS("No preview", "沒有預覽"),
+                    WS("No author preview", "沒有作者預覽"),
                     systemImage: "photo",
                     description: Text(WS(
                         "The author did not publish a preview for this item.",
@@ -84,8 +112,8 @@ struct WorkshopLargePreview: View {
                 } label: {
                     Label(
                         animationUnavailable
-                            ? WS("Still preview only", "僅靜態預覽")
-                            : WS("Play animated preview", "播放動態預覽"),
+                            ? WS("Still author preview only", "僅有作者提供的靜態預覽")
+                            : WS("Play author-provided animation", "播放作者提供的動態預覽"),
                         systemImage: animationUnavailable ? "photo" : "play.circle.fill")
                         .font(.subheadline.weight(.semibold))
                         .padding(.horizontal, 12)
@@ -112,13 +140,40 @@ struct WorkshopLargePreview: View {
                 .strokeBorder(Color.primary.opacity(0.08))
         }
         .task(id: item.previewURL) {
-            still = nil
-            animation = nil
-            animationUnavailable = false
-            guard let url = item.previewURL else { return }
-            if let data = try? await cache.largeThumbnail(for: url) {
-                still = UIImage(data: data)
+            await loadStill()
+        }
+        .task(id: stillRetryID) {
+            guard stillRetryID > 0 else { return }
+            await loadStill()
+        }
+    }
+
+    @MainActor
+    private func loadStill() async {
+        still = nil
+        stillProgress = nil
+        stillReceivedBytes = nil
+        stillFailed = false
+        animation = nil
+        animationUnavailable = false
+        guard let url = item.previewURL else { return }
+        do {
+            let data = try await cache.largeThumbnail(for: url) { received, expected in
+                if expected == -1, received >= 0 {
+                    Task { @MainActor in
+                        stillProgress = nil
+                        stillReceivedBytes = received
+                    }
+                } else if let fraction = WorkshopPreviewProgress.fraction(
+                    received: received, expected: expected) {
+                    Task { @MainActor in stillProgress = fraction }
+                }
             }
+            guard !Task.isCancelled else { return }
+            if let image = UIImage(data: data) { still = image } else { stillFailed = true }
+        } catch {
+            guard !Task.isCancelled else { return }
+            stillFailed = true
         }
     }
 
@@ -127,11 +182,13 @@ struct WorkshopLargePreview: View {
         defer { isLoadingAnimation = false }
         do {
             let data = try await cache.animatedPreview(for: url)
-            guard let image = UIImage(data: data), image.images?.count ?? 0 > 1 else {
+            guard let decoded = await Task.detached(priority: .userInitiated, operation: {
+                WorkshopAnimationDecoder.decode(data)
+            }).value else {
                 animationUnavailable = true
                 return
             }
-            animation = image
+            animation = decoded
         } catch {
             animationUnavailable = true
         }

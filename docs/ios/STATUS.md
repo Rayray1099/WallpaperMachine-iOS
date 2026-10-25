@@ -54,6 +54,12 @@ The app is an in-app native wallpaper renderer. Public iOS APIs do not allow arb
   `xattr`/`sips`/`tzset` and macOS process APIs). No upstream native verdict or
   macOS regression pass is claimed; unrelated upstream scripts were not rewritten.
 
+## Workshop follow-up in progress
+
+- User reports author preview playback failure and requests native signed-in Workshop downloads plus progress. Source fix replaces UIKit's single-frame `UIImage(data:)` animation path with bounded ImageIO frame decode, plus real preview-byte progress and failed/retry state. Author preview is not the actual rendered wallpaper.
+- A separate experimental native Rust CM/SteamPipe compiler target is under development; it is not linked to the installed app yet and no real authenticated Workshop transfer is verified. Public metadata/subscription login is not ownership authorization. App/depot access must be issued by Steam for an owning account.
+- User confirms the first IPA was signed/installed/opened. iCTRL launched the real app and read its Workshop detail UI in Traditional Chinese, but repeated foreground changes and stale accessibility vs screenshot state interrupted interaction. No conversion completion or wallpaper application verified. Do not treat the runner's process metrics as app metrics.
+
 ## Next build cycle
 
 Current build-continuation milestone is complete: final source compiled in Release, bundled source-license payload, packaged/validated unsigned IPA, and actual artifact downloaded/independently checked. Remaining source-parity work includes scene PCM mic input, licensed shared-asset import UI, live scene/web frame-provider wiring and standalone WebM integration; Workshop CM/depot downloads remain unimplemented. Signing, installation and physical scene/video/web/import/settings/export tests are deferred until the user makes the iPad available again. Do not operate the device in the meantime.
