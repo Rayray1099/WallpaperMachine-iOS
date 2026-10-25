@@ -8,14 +8,14 @@ import Foundation
 /// grants access, and a denial is shown instead of pretending it works.
 @MainActor
 final class WMMicrophoneController: ObservableObject {
-    @Published private(set) var permission: AVAudioSession.RecordPermission
+    @Published private(set) var permission: MicrophoneAudioAnalyzer.Permission
 
     init() {
-        permission = AVAudioApplication.shared.recordPermission
+        permission = MicrophoneAudioAnalyzer.currentPermission()
     }
 
     func refresh() {
-        permission = AVAudioApplication.shared.recordPermission
+        permission = MicrophoneAudioAnalyzer.currentPermission()
     }
 
     func requestAccess() async -> Bool {

@@ -32,16 +32,18 @@ class BuildProductDiscovery(unittest.TestCase):
     def test_build_settings_match_named_app_target(self):
         wrong_target = self.root / "Tests.app"
         wrong_target.mkdir()
+        named_app = self.root / "NamedProduct.app"
+        named_app.mkdir()
         settings = {
             "returncode": 0,
             "stdout": json.dumps([
                 {"target": "WallpaperMachineIOSTests", "buildSettings": {
                     "TARGET_BUILD_DIR": str(self.root), "FULL_PRODUCT_NAME": "Tests.app"}},
                 {"target": "WallpaperMachineIOS", "buildSettings": {
-                    "TARGET_BUILD_DIR": str(self.root), "FULL_PRODUCT_NAME": "WallpaperMachineIOS.app"}},
+                    "TARGET_BUILD_DIR": str(self.root), "FULL_PRODUCT_NAME": "NamedProduct.app"}},
             ]),
         }
-        self.assertEqual(build.app_product_candidates(settings, self.derived), [self.app])
+        self.assertEqual(build.app_product_candidates(settings, self.derived), [named_app])
 
     def test_missing_named_target_or_nonexistent_product_falls_back(self):
         settings = {

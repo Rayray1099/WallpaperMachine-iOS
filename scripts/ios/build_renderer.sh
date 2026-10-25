@@ -355,7 +355,8 @@ run_logged() {
     "$@"
     return
   fi
-  log_file="${LOG_DIR}/${stage}.log"
+  # Artifact downloads must be safe on Windows too; colons are not valid NTFS names.
+  log_file="${LOG_DIR}/${stage//:/-}.log"
   if ! "$@" >"${log_file}" 2>&1; then
     printf 'error: %s failed; last 100 lines of %s\n' "${stage}" "${log_file}" >&2
     tail -n 100 "${log_file}" >&2 || true
