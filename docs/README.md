@@ -64,6 +64,7 @@ live under `testing/`.
 | [ios/INTEGRATION.md](ios/INTEGRATION.md) | Cross-module implementation decisions and current renderer build contract |
 | [ios/STATUS.md](ios/STATUS.md) | Feature-parity checklist with source/build/on-device verification kept separate |
 | [ios/EXPORT.md](ios/EXPORT.md) | Real-frame export, iPad geometry, experimental tendies and AirCard safety boundary |
+| [ios/PC-CONVERTER.md](ios/PC-CONVERTER.md) | Trusted-LAN PC conversion, iPad web/native pairing, output limits and actual verification |
 | [ios/QA.md](ios/QA.md) | Executable iCTRL/offline regression harness and physical-device evidence policy |
 
 ## Archive
