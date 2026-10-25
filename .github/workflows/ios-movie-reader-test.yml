@@ -50,6 +50,8 @@ jobs:
           xcodebuild -version
           xcrun --sdk macosx --show-sdk-version
           xcrun swiftc --version
+          sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
+          grep -n 'AVErrorMediaServicesWereReset.*11819' "$sdk_path/System/Library/Frameworks/AVFoundation.framework/Headers/AVError.h"
           # mktemp owns this run's binary/logs/fixtures, never another task's files.
           movie_dir="$(mktemp -d "${RUNNER_TEMP}/wm-movie-reader.XXXXXXXX")"
           echo "MOVIE_TEST_DIR=$movie_dir" >> "$GITHUB_ENV"

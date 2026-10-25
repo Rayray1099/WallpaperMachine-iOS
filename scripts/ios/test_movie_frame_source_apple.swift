@@ -154,7 +154,10 @@ struct MovieFrameSourceAppleRegression {
                     "Fixture codec must be H.264 / avc1")
         let dimensions = CMVideoFormatDescriptionGetDimensions(formats[0])
         try require(dimensions.width == Int32(side) && dimensions.height == Int32(side), "Format dimensions mismatch")
-        let extensions = CMFormatDescriptionGetExtensions(formats[0]) as NSDictionary
+        guard let rawExtensions = CMFormatDescriptionGetExtensions(formats[0]) else {
+            throw Failure(description: "Missing format extensions")
+        }
+        let extensions = rawExtensions as NSDictionary
         guard let atoms = extensions[kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms] as? NSDictionary,
               let avcC = atoms["avcC"] as? Data, avcC.count >= 4 else {
             throw Failure(description: "Missing avcC profile/level")
