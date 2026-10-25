@@ -1,0 +1,4 @@
+crc-catalog 2.5.0 license texts retrieved from its declared upstream repository:
+https://raw.githubusercontent.com/akhilles/crc-catalog/master/LICENSES/MIT.txt
+https://raw.githubusercontent.com/akhilles/crc-catalog/master/LICENSES/Apache-2.0.txt
+These are the upstream LICENSES texts, not locally authored grant/copyright language.
