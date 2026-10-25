@@ -1,0 +1,178 @@
+# Actual UIKit/CoreImage/JPEG/ZIP ownership in a blank, owned simulator host.
+name: iOS Export Ownership (isolated simulator)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios/main]
+    paths:
+      - "iOS/Sources/Export/**"
+      - "iOS/Tests/ExportOwnership/**"
+      - "scripts/ios/test_zip_payload_lifetime.swift"
+      - ".github/workflows/ios-export-ownership-test.yml"
+  pull_request:
+    branches: [ios/main]
+    paths:
+      - "iOS/Sources/Export/**"
+      - "iOS/Tests/ExportOwnership/**"
+      - "scripts/ios/test_zip_payload_lifetime.swift"
+      - ".github/workflows/ios-export-ownership-test.yml"
+
+permissions:
+  contents: read
+concurrency:
+  group: ios-export-ownership-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  export-ownership:
+    runs-on: macos-15
+    timeout-minutes: 25
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Pin installed Xcode and allocate this run's temporary output
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcode_app="$(python3 -c 'import pathlib,re; apps=[p for p in pathlib.Path("/Applications").glob("Xcode*.app") if re.fullmatch(r"Xcode_\d+(?:\.\d+)*\.app",p.name) and (p/"Contents/Developer").is_dir()]; print(max(apps,key=lambda p:tuple(map(int,re.findall(r"\d+",p.name))))) if apps else None')"
+          test -n "$xcode_app"
+          export DEVELOPER_DIR="$xcode_app/Contents/Developer"
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version
+          test_dir="$(mktemp -d "$RUNNER_TEMP/wm-export-ownership.XXXXXXXX")"
+          echo "EXPORT_OWNERSHIP_DIR=$test_dir" >> "$GITHUB_ENV"
+          git rev-parse HEAD
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install --quiet xcodegen; fi
+
+      - name: Execute unchanged ZIP payload lifetime regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun swiftc -swift-version 5 -warnings-as-errors iOS/Sources/Export/ZipArchiveWriter.swift scripts/ios/test_zip_payload_lifetime.swift -o "$EXPORT_OWNERSHIP_DIR/zip-payload-test"
+          "$EXPORT_OWNERSHIP_DIR/zip-payload-test" | tee "$EXPORT_OWNERSHIP_DIR/zip-payload.log"
+
+      - name: Create one owned available iPad simulator without downloading runtimes
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl list runtimes --json > "$EXPORT_OWNERSHIP_DIR/runtimes.json"
+          xcrun simctl list devicetypes --json > "$EXPORT_OWNERSHIP_DIR/device-types.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["EXPORT_OWNERSHIP_DIR"])
+          runtimes = [r for r in json.loads((root/"runtimes.json").read_text())["runtimes"]
+                      if r.get("isAvailable") is True and r["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-")
+                      and int(r["version"].split(".")[0]) >= 18]
+          assert runtimes, "No installed iOS 18+ simulator runtime; no download is authorized"
+          runtime = max(runtimes, key=lambda r: tuple(map(int, r["version"].split("."))))
+          components = list(map(int, runtime["version"].split(".")))
+          components += [0] * (3-len(components))
+          packed_version = (components[0] << 16) | (components[1] << 8) | components[2]
+          devices = [d for d in json.loads((root/"device-types.json").read_text())["devicetypes"]
+                     if d.get("productFamily") == "iPad"
+                     and d.get("minRuntimeVersion", 0) <= packed_version <= d.get("maxRuntimeVersion", 0xffffffff)]
+          assert devices, "No compatible installed iPad device type"
+          selected = {"runtime": runtime["identifier"], "deviceType": devices[-1]["identifier"]}
+          (root/"selection.json").write_text(json.dumps(selected, indent=2))
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write("EXPORT_RUNTIME="+selected["runtime"]+"\nEXPORT_DEVICE_TYPE="+selected["deviceType"]+"\n")
+          PY
+          # GITHUB_ENV updates apply only to later steps; read the selection now.
+          EXPORT_DEVICE_TYPE="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["EXPORT_OWNERSHIP_DIR"])/"selection.json").read_text())["deviceType"])')"
+          EXPORT_RUNTIME="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["EXPORT_OWNERSHIP_DIR"])/"selection.json").read_text())["runtime"])')"
+          udid="$(xcrun simctl create "WMExportOwnership-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" "$EXPORT_DEVICE_TYPE" "$EXPORT_RUNTIME")"
+          [[ "$udid" =~ ^[A-Fa-f0-9-]{36}$ ]]
+          printf '%s\n' "$udid" > "$EXPORT_OWNERSHIP_DIR/owned-simulator.txt"
+          echo "EXPORT_SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          # Never open Simulator.app or contact a physical device.
+
+      - name: Build isolated production-source closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodegen generate --spec iOS/Tests/ExportOwnership/project.yml --project iOS/Tests/ExportOwnership
+          xcodebuild build-for-testing -project iOS/Tests/ExportOwnership/WMExportOwnershipHarness.xcodeproj -scheme WMExportOwnershipHarness -configuration Debug -sdk iphonesimulator -destination "id=$EXPORT_SIMULATOR_UDID" -derivedDataPath "$EXPORT_OWNERSHIP_DIR/DerivedData" CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$EXPORT_OWNERSHIP_DIR/build.log"
+
+      - name: Observe three exact pool scopes in independent test-host processes
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for method in testPlainObserve testAppendPoolObserve testPipelinePoolBounded; do
+            xcrun simctl terminate "$EXPORT_SIMULATOR_UDID" com.rayray1099.wallpapermachine.ios.exportownershipharness >/dev/null 2>&1 || true
+            if xcodebuild test-without-building -project iOS/Tests/ExportOwnership/WMExportOwnershipHarness.xcodeproj -scheme WMExportOwnershipHarness -configuration Debug -sdk iphonesimulator -destination "id=$EXPORT_SIMULATOR_UDID" -derivedDataPath "$EXPORT_OWNERSHIP_DIR/DerivedData" -resultBundlePath "$EXPORT_OWNERSHIP_DIR/$method.xcresult" -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 -only-testing:"WMExportOwnershipTests/ExportOwnershipTests/$method" CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$EXPORT_OWNERSHIP_DIR/$method.log"; then :; else failed=1; fi
+            xcrun xcresulttool get test-results summary --path "$EXPORT_OWNERSHIP_DIR/$method.xcresult" --format json > "$EXPORT_OWNERSHIP_DIR/$method-summary.json"
+            xcrun xcresulttool get test-results tests --path "$EXPORT_OWNERSHIP_DIR/$method.xcresult" --format json > "$EXPORT_OWNERSHIP_DIR/$method-tests.json"
+          done
+          test "$failed" = 0
+
+      - name: Require all three named tests with zero skips or missing cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          root = pathlib.Path(os.environ["EXPORT_OWNERSHIP_DIR"])
+          for method in ["testPlainObserve", "testAppendPoolObserve", "testPipelinePoolBounded"]:
+              summary = json.loads((root/(method+"-summary.json")).read_text())
+              assert summary.get("result") == "Passed" and not summary.get("testFailures"), method
+              assert summary.get("passedTests") == summary.get("totalTestCount") == 1, method
+              assert summary.get("failedTests") == summary.get("skippedTests") == 0, method
+              assert summary.get("expectedFailures", 0) == 0, method
+              cases = []
+              def visit(node):
+                  if node.get("nodeType") == "Test Case": cases.append(node)
+                  for child in node.get("children", []): visit(child)
+              for node in json.loads((root/(method+"-tests.json")).read_text())["testNodes"]: visit(node)
+              assert len(cases) == 1 and cases[0].get("result") == "Passed", method
+              assert re.fullmatch(re.escape(method)+r"(?:\(\))?", cases[0].get("name", "")), cases
+              assert re.fullmatch(r"(?:WMExportOwnershipTests[/.])?ExportOwnershipTests[/.]"+re.escape(method)+r"(?:\(\))?", cases[0].get("nodeIdentifier", "")), cases
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as out:
+              out.write("## Export ownership: 3 actual UIKit XCTest cases passed, zero skipped\n")
+              out.write("Plain and append-only pools are bounded observations, not full-frame-count pass claims if the safety cap stops them. Whole-pipeline pool must complete all 80 small and 240 native-size frames. All source allocations must release after teardown.\n")
+              out.write("No production pooling change, AVAssetReader/device reset reproduction, total-memory guarantee or best-quality device export is established.\n")
+          PY
+
+      - name: Delete only the simulator created by this run
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${EXPORT_SIMULATOR_UDID:-}" ]; then
+            test "$(cat "$EXPORT_OWNERSHIP_DIR/owned-simulator.txt")" = "$EXPORT_SIMULATOR_UDID"
+            [[ "$EXPORT_SIMULATOR_UDID" =~ ^[A-Fa-f0-9-]{36}$ ]]
+            xcrun simctl shutdown "$EXPORT_SIMULATOR_UDID" || true
+            xcrun simctl delete "$EXPORT_SIMULATOR_UDID"
+          fi
+
+      - name: Upload actual ownership observations and XCTest bundles
+        if: ${{ always() && env.EXPORT_OWNERSHIP_DIR != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-export-ownership-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.EXPORT_OWNERSHIP_DIR }}/*.log
+            ${{ env.EXPORT_OWNERSHIP_DIR }}/*.json
+            ${{ env.EXPORT_OWNERSHIP_DIR }}/*.xcresult/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Remove this run's local temporary output
+        if: ${{ always() && env.EXPORT_OWNERSHIP_DIR != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$EXPORT_OWNERSHIP_DIR" in "$RUNNER_TEMP"/wm-export-ownership.*) ;; *) exit 1 ;; esac
+          test -d "$EXPORT_OWNERSHIP_DIR" && test ! -L "$EXPORT_OWNERSHIP_DIR"
+          rm -rf -- "$EXPORT_OWNERSHIP_DIR"

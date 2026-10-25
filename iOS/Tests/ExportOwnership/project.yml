@@ -1,0 +1,83 @@
+# Actual export compositor/JPEG/ZIP ownership, isolated from app/renderer/media.
+name: WMExportOwnershipHarness
+options:
+  bundleIdPrefix: com.rayray1099.wallpapermachine
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    TARGETED_DEVICE_FAMILY: "2"
+    SUPPORTED_PLATFORMS: iphonesimulator
+    SUPPORTS_MACCATALYST: NO
+    SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGN_IDENTITY: ""
+    DEVELOPMENT_TEAM: ""
+    GENERATE_INFOPLIST_FILE: YES
+    CLANG_ENABLE_MODULES: YES
+    CLANG_ENABLE_OBJC_ARC: YES
+  configs:
+    Debug:
+      ENABLE_TESTABILITY: YES
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+targets:
+  WMExportOwnershipHarness:
+    type: application
+    platform: iOS
+    sources:
+      - path: ExportOwnershipApp.swift
+      - path: ../../Sources/Export/ExportGeometry.swift
+      - path: ../../Sources/Export/WallpaperExportSettings.swift
+      - path: ../../Sources/Export/TendiesScreenClass.swift
+      - path: ../../Sources/Export/TendiesManifest.swift
+      - path: ../../Sources/Export/KeyedArchiveBuilder.swift
+      - path: ../../Sources/Export/ZipArchiveWriter.swift
+      - path: ../../Sources/Export/FrameCompositor.swift
+      - path: ../../Sources/Export/TendiesExportWriter.swift
+    dependencies:
+      - sdk: Foundation.framework
+      - sdk: UIKit.framework
+      - sdk: CoreGraphics.framework
+      - sdk: CoreImage.framework
+      - sdk: CoreVideo.framework
+      - sdk: ImageIO.framework
+      - sdk: UniformTypeIdentifiers.framework
+    settings:
+      base:
+        PRODUCT_NAME: WMExportOwnershipHarness
+        PRODUCT_MODULE_NAME: WMExportOwnershipHarness
+        PRODUCT_BUNDLE_IDENTIFIER: com.rayray1099.wallpapermachine.ios.exportownershipharness
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+  WMExportOwnershipTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ExportOwnershipTests.swift
+    dependencies:
+      - target: WMExportOwnershipHarness
+    settings:
+      base:
+        PRODUCT_NAME: WMExportOwnershipTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.rayray1099.wallpapermachine.ios.exportownershipharness.tests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/WMExportOwnershipHarness.app/WMExportOwnershipHarness"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  WMExportOwnershipHarness:
+    build:
+      targets:
+        WMExportOwnershipHarness: all
+        WMExportOwnershipTests: [test]
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - name: WMExportOwnershipTests
+          parallelizable: false
+          randomExecutionOrder: false
