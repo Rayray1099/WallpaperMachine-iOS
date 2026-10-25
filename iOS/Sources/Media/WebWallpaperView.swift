@@ -42,6 +42,7 @@ final class WebWallpaperView: UIView, MediaFrameProviding {
   private(set) var loadFailure: WebWallpaperFailure?
 
   var onLoadStateChange: ((WebWallpaperLoadState) -> Void)?
+  var onWindowVisibilityChange: ((Bool) -> Void)?
   var onFailure: ((WebWallpaperFailure) -> Void)?
 
   /// An http(s) navigation the page attempted. The host may show a confirmation
@@ -178,6 +179,7 @@ final class WebWallpaperView: UIView, MediaFrameProviding {
 
   override func didMoveToWindow() {
     super.didMoveToWindow()
+    onWindowVisibilityChange?(window != nil)
     syncSuspension()
   }
 
@@ -317,8 +319,8 @@ final class WebWallpaperView: UIView, MediaFrameProviding {
   private func deliverUserProperties() {
     guard isLoaded else { return }
     run(
-      "window.__mweWallpaperHost.applyUserProperties(JSON.parse(properties))",
-      arguments: ["properties": Self.userPropertiesJSON(properties)])
+      "window.__mweWallpaperHost.applyUserProperties(properties)",
+      arguments: ["properties": Self.userPropertiesPayload(properties)])
   }
 
   private func deliverGeneralProperties() {
@@ -529,7 +531,7 @@ final class WebWallpaperView: UIView, MediaFrameProviding {
     payload.reserveCapacity(properties.count)
     for (key, property) in properties {
       guard let data = try? JSONEncoder().encode(property.value),
-        let object = try? JSONSerialization.jsonObject(with: data)
+        let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
       else {
         payload[key] = ["value": NSNull()]
         continue
@@ -691,6 +693,7 @@ extension WebWallpaperView: WKUIDelegate {
     completionHandler(nil)
   }
 
+  @available(iOS 18.4, *)
   func webView(
     _ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
     initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void
