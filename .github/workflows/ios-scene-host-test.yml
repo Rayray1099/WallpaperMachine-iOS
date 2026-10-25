@@ -1,0 +1,108 @@
+# Process-isolated UIKit component tests on an owned headless iPad simulator.
+# Actual Swift scene host; test-only C ABI recorder, not the engine or GPU renderer.
+name: iOS Scene Host (isolated simulator)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios/main]
+    paths:
+      - "iOS/Sources/Renderer/SceneWallpaperView.swift"
+      - "iOS/Sources/Renderer/SceneResourceDirectories.swift"
+      - "iOS/Sources/Renderer/SceneSurfaceGeometry.swift"
+      - "iOS/Sources/Renderer/SceneStartupWait.swift"
+      - "iOS/Sources/Renderer/SceneHostSession.swift"
+      - "iOS/Sources/Renderer/SceneWallpaperPropertyJSON.swift"
+      - "iOS/Sources/Models/WallpaperModels.swift"
+      - "iOS/Tests/SceneHost/**"
+      - "Renderer/Engine/src/Platform/Apple/SceneWallpaperBindings.h"
+      - "Renderer/Engine/src/Core/RendererCounters.h"
+      - "scripts/ios/check_scene_host_simulator.py"
+      - "scripts/tests/test_ios_scene_host_simulator.py"
+      - "scripts/lib/xcode.py"
+      - ".github/workflows/ios-scene-host-test.yml"
+  pull_request:
+    branches: [ios/main]
+    paths:
+      - "iOS/Sources/Renderer/SceneWallpaperView.swift"
+      - "iOS/Sources/Renderer/SceneResourceDirectories.swift"
+      - "iOS/Sources/Renderer/SceneSurfaceGeometry.swift"
+      - "iOS/Sources/Renderer/SceneStartupWait.swift"
+      - "iOS/Sources/Renderer/SceneHostSession.swift"
+      - "iOS/Sources/Renderer/SceneWallpaperPropertyJSON.swift"
+      - "iOS/Sources/Models/WallpaperModels.swift"
+      - "iOS/Tests/SceneHost/**"
+      - "Renderer/Engine/src/Platform/Apple/SceneWallpaperBindings.h"
+      - "Renderer/Engine/src/Core/RendererCounters.h"
+      - "scripts/ios/check_scene_host_simulator.py"
+      - "scripts/tests/test_ios_scene_host_simulator.py"
+      - "scripts/lib/xcode.py"
+      - ".github/workflows/ios-scene-host-test.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-scene-host-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-uikit-host:
+    runs-on: macos-15
+    timeout-minutes: 25
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+      SCENE_HOST_ARTIFACTS: ${{ github.workspace }}/artifacts/ios-scene-host-simulator/run-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Check out source without saved credentials
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prepare XcodeGen only (no renderer or runtime installation)
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Darwin
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install --quiet xcodegen
+          fi
+          xcodegen --version
+          python3 --version
+          # The runner script records xcode-select's existing value and uses an
+          # installed stable Xcode via DEVELOPER_DIR only; no global selection.
+          # Available simulator SDK/runtime/device identifiers are inspected and
+          # pinned from JSON. Missing iOS 18+ runtime is a failure, not a download.
+
+      - name: Test offline runtime, ownership and xcresult verdict logic
+        run: python3 -B -m unittest discover -s scripts/tests -p 'test_ios_scene_host_simulator.py' -v
+
+      - name: Execute actual UIKit scene-host tests headlessly
+        run: python3 -B scripts/ios/check_scene_host_simulator.py --artifacts-dir "${SCENE_HOST_ARTIFACTS}"
+
+      - name: Verify cleanup of this run's simulator only
+        if: always()
+        run: python3 -B scripts/ios/check_scene_host_simulator.py --cleanup-only --artifacts-dir "${SCENE_HOST_ARTIFACTS}"
+
+      - name: Upload actual XCTest results, pinning and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-scene-host-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.SCENE_HOST_ARTIFACTS }}/*.json
+            ${{ env.SCENE_HOST_ARTIFACTS }}/*.log
+            ${{ env.SCENE_HOST_ARTIFACTS }}/summary.md
+            ${{ env.SCENE_HOST_ARTIFACTS }}/SceneHost.xcresult/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Report setup failures without claiming test coverage
+        if: always()
+        run: |
+          if [ ! -f "${SCENE_HOST_ARTIFACTS}/report.json" ]; then
+            echo "## Isolated UIKit scene host: no XCTest verdict" >> "$GITHUB_STEP_SUMMARY"
+            echo "Setup did not reach the test runner. Zero UIKit, native renderer or physical iPad passes are claimed." >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -19,6 +19,19 @@ struct SceneWallpaperView: UIViewRepresentable {
     static func dismantleUIView(_ view: SceneMetalSurface, coordinator: ()) { view.shutdown() }
 }
 
+/// Narrow environment seams for deterministic UIKit host tests. Native calls still
+/// use the real C ABI; only the isolated simulator test target links a recorder.
+@MainActor
+struct SceneHostEnvironment {
+    var now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    var prepareResources: () throws -> SceneResourceDirectories = { try SceneResourceDirectories.prepare() }
+    var initiallyActive: () -> Bool = { UIApplication.shared.applicationState == .active }
+    var prepareMetal: (CAMetalLayer) -> Void = { $0.device = MTLCreateSystemDefaultDevice() }
+    var metalAvailable: (CAMetalLayer) -> Bool = { $0.device != nil }
+    var displayScale: (UIView) -> Double = { Double($0.window?.screen.scale ?? $0.traitCollection.displayScale) }
+    var automaticallyPollHealth = true
+}
+
 @MainActor
 final class SceneMetalSurface: UIView {
     override class var layerClass: AnyClass { CAMetalLayer.self }
@@ -37,19 +50,23 @@ final class SceneMetalSurface: UIView {
     private var observers: [NSObjectProtocol] = []
     private var healthTimer: Timer?
     private var active: Bool
+    private let environment: SceneHostEnvironment
 
     private var mayRender: Bool {
         active && window != nil && bounds.width.isFinite && bounds.height.isFinite && bounds.width > 0 && bounds.height > 0
     }
-    private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
+    private var now: TimeInterval { environment.now() }
 
-    init(url: URL, settings: PlaybackSettings, properties: [String: WallpaperProperty]) {
+    init(url: URL, settings: PlaybackSettings, properties: [String: WallpaperProperty],
+         environment: SceneHostEnvironment? = nil) {
+        let environment = environment ?? SceneHostEnvironment()
+        self.environment = environment
         session = SceneHostSession(url: url)
         self.settings = settings; self.properties = properties
-        active = UIApplication.shared.applicationState == .active
+        active = environment.initiallyActive()
         super.init(frame: .zero)
         backgroundColor = .black
-        metalLayer.device = MTLCreateSystemDefaultDevice()
+        environment.prepareMetal(metalLayer)
         metalLayer.pixelFormat = .bgra8Unorm
         metalLayer.framebufferOnly = true
         status.textColor = .white; status.backgroundColor = UIColor.black.withAlphaComponent(0.75)
@@ -59,10 +76,10 @@ final class SceneMetalSurface: UIView {
         addSubview(status)
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.active = false; self?.syncPaused() }
+            Task { @MainActor in self?.setApplicationActive(false) }
         })
         observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.active = true; self?.syncPaused() }
+            Task { @MainActor in self?.setApplicationActive(true) }
         })
         addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hover(_:))))
         isMultipleTouchEnabled = false
@@ -94,13 +111,19 @@ final class SceneMetalSurface: UIView {
         else if bounds.width > 0, bounds.height > 0, configureSurface(), needsSettings { _ = applyNativeSettings() }
     }
 
+    /// Shared by application notifications and deterministic lifecycle tests.
+    func setApplicationActive(_ active: Bool) {
+        self.active = active
+        _ = syncPaused()
+    }
+
     private func initialize() {
         guard session.beginInitialization() else { return }
-        guard metalLayer.device != nil else { terminate("Metal is not available on this device."); return }
+        guard environment.metalAvailable(metalLayer) else { terminate("Metal is not available on this device."); return }
         let resources: SceneResourceDirectories
         do {
             // An empty mount supplies no licensed resources a project may require.
-            resources = try SceneResourceDirectories.prepare()
+            resources = try environment.prepareResources()
         } catch {
             terminate(NSLocalizedString("scene.resources.unavailable", comment: "Scene resource directory preparation failed"))
             return
@@ -125,16 +148,18 @@ final class SceneMetalSurface: UIView {
         guard check(result), syncPaused() else { return }
         startupWait.reset(now: now)
         startupWait.setWaiting(eligible: mayRender, now: now)
-        healthTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            // Read the current session/handle, never a captured former native pointer.
-            Task { @MainActor in self?.readHealth() }
+        if environment.automaticallyPollHealth {
+            healthTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                // Read the current session/handle, never a captured former native pointer.
+                Task { @MainActor in self?.readHealth() }
+            }
         }
         initialized = true
     }
     @discardableResult private func configureSurface() -> Bool {
         guard let handle, session.failure == nil else { return false }
         guard let candidate = SceneSurfaceGeometry(logicalWidth: Double(bounds.width), logicalHeight: Double(bounds.height),
-                                                   screenScale: Double(window?.screen.scale ?? traitCollection.displayScale),
+                                                   screenScale: environment.displayScale(self),
                                                    renderScale: settings.renderScale) else {
             terminate(NSLocalizedString("scene.surface.invalid", comment: "Invalid native scene surface geometry"))
             return false
@@ -213,7 +238,7 @@ final class SceneMetalSurface: UIView {
         lastPaused = paused
         return true
     }
-    private func readHealth() {
+    func readHealth() {
         guard let handle, session.failure == nil else { return }
         var reason = [CChar](repeating: 0, count: 2048)
         let length = reason.withUnsafeMutableBufferPointer {
