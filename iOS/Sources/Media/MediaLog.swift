@@ -8,18 +8,22 @@ enum MediaLog {
     subsystem: "com.rayray1099.wallpapermachine.ios", category: "media")
 
   static func debug(_ message: @autoclosure () -> String) {
-    logger.debug("\(message(), privacy: .public)")
+    let text = message()
+    logger.debug("\(text, privacy: .public)")
   }
 
   static func info(_ message: @autoclosure () -> String) {
-    logger.info("\(message(), privacy: .public)")
+    let text = message()
+    logger.info("\(text, privacy: .public)")
   }
 
   static func warning(_ message: @autoclosure () -> String) {
-    logger.warning("\(message(), privacy: .public)")
+    let text = message()
+    logger.warning("\(text, privacy: .public)")
   }
 
   static func error(_ message: @autoclosure () -> String) {
-    logger.error("\(message(), privacy: .public)")
+    let text = message()
+    logger.error("\(text, privacy: .public)")
   }
 }
