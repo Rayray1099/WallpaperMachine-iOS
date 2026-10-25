@@ -47,11 +47,12 @@ def find_licenses(directory: Path, labels: tuple[str, ...] = ("LICENSE", "COPYIN
     return candidates
 
 
-def run_metadata(manifest: Path, target: str, cargo: str = "cargo", runner=subprocess.run) -> list[dict]:
+def run_metadata(manifest: Path, target: str, cargo: str = "cargo", runner=subprocess.run, package: str = "wm-shader") -> list[dict]:
     """Use cargo tree for the compiled normal closure; metadata only locates source paths."""
-    tree_command = [cargo, "tree", "--locked", "--manifest-path", str(manifest),
-                    "-p", "wm-shader", "--features", "ffi", "--target", target,
-                    "--edges", "normal", "--prefix", "none", "-f", "{p}|{l}"]
+    tree_command = [cargo, "tree", "--locked", "--manifest-path", str(manifest), "-p", package]
+    if package == "wm-shader":
+        tree_command += ["--features", "ffi"]
+    tree_command += ["--target", target, "--edges", "normal", "--prefix", "none", "-f", "{p}|{l}"]
     tree_result = runner(tree_command, cwd=manifest.parent, text=True, capture_output=True, check=False)
     if tree_result.returncode:
         raise NoticeError(f"cargo tree failed ({tree_result.returncode}): {(tree_result.stderr or tree_result.stdout)[-2000:]}")
@@ -60,8 +61,8 @@ def run_metadata(manifest: Path, target: str, cargo: str = "cargo", runner=subpr
         match = re.match(r"^([^ |]+) v([^ |]+)(?: \([^)]*\))?\|", line.strip())
         if match:
             selected.add((match.group(1), match.group(2)))
-    if not selected or not any(name == "wm-shader" for name, _ in selected):
-        raise NoticeError("cargo tree did not report the wm-shader normal dependency closure")
+    if not selected or not any(name == package for name, _ in selected):
+        raise NoticeError(f"cargo tree did not report the {package} normal dependency closure")
 
     metadata_command = [cargo, "metadata", "--format-version", "1", "--locked", "--manifest-path", str(manifest)]
     result = runner(metadata_command, cwd=manifest.parent, text=True, capture_output=True, check=False)
@@ -84,7 +85,24 @@ def crate_licenses(package: dict, cargo_home: Path) -> list[Path]:
     manifest = Path(package.get("manifest_path", ""))
     if not manifest.is_file():
         raise NoticeError(f"Cargo manifest for {package.get('name')} {package.get('version')} is missing: {manifest}")
-    return find_licenses(manifest.parent, ("LICENSE", "COPYING", "UNLICENSE", "COPYRIGHT"))
+    license_file = package.get("license_file")
+    if license_file:
+        candidate = Path(license_file)
+        if not candidate.is_absolute():
+            candidate = manifest.parent / candidate
+        if candidate.is_file():
+            return [candidate]
+    try:
+        return find_licenses(manifest.parent, ("LICENSE", "COPYING", "UNLICENSE", "COPYRIGHT"))
+    except NoticeError:
+        # openssl-src vendors upstream OpenSSL beneath its crate root.
+        nested = manifest.parent / "openssl/LICENSE.txt"
+        if package.get("name") == "openssl-src" and nested.is_file():
+            return [nested]
+        fallback = ROOT / "Packaging/notices" / package.get("name", "")
+        if fallback.is_dir():
+            return find_licenses(fallback, ("LICENSE", "COPYING", "UNLICENSE", "COPYRIGHT"))
+        raise
 
 
 def add_copy(output: Path, source: Path, destination: str, index: list[str]) -> None:
@@ -97,7 +115,8 @@ def add_copy(output: Path, source: Path, destination: str, index: list[str]) -> 
 
 def generate(output: Path, deps_sources: Path, cargo_home: Path, zipfoundation: Path,
              cargo: str = "cargo", target: str = "aarch64-apple-ios",
-             cargo_tree_runner=subprocess.run, deps_downloads: Path | None = None) -> list[str]:
+             cargo_tree_runner=subprocess.run, deps_downloads: Path | None = None,
+             steam_manifest: Path | None = None) -> list[str]:
     if output.exists() and any(output.iterdir()):
         raise NoticeError(f"refusing to overwrite non-empty notice output directory: {output}")
     output.mkdir(parents=True, exist_ok=True)
@@ -154,9 +173,13 @@ def generate(output: Path, deps_sources: Path, cargo_home: Path, zipfoundation: 
 
     packages = run_metadata(RENDERER / "Cargo.toml", target, cargo, cargo_tree_runner)
     crate_entries = []
+    if steam_manifest is not None:
+        packages.extend(run_metadata(steam_manifest, target, cargo, cargo_tree_runner, package="wm-steam-transport"))
+    # Merge the two target closures by exact crate identity before writing files.
+    packages = list({(package["name"], package["version"]): package for package in packages}.values())
     for package in packages:
         # Workspace-owned packages are not third-party dependencies.
-        if package.get("name") in {"wm-shader", "wallpaper-core", "wallpaper-bridge"}:
+        if package.get("name") in {"wm-shader", "wallpaper-core", "wallpaper-bridge", "wm-steam-transport"}:
             continue
         sources = crate_licenses(package, cargo_home)
         declared = package.get("license") or "(license not declared)"
@@ -168,7 +191,10 @@ def generate(output: Path, deps_sources: Path, cargo_home: Path, zipfoundation: 
     for zip_license in find_licenses(zipfoundation, ("LICENSE", "COPYING")):
         add_copy(output, zip_license, f"zipfoundation/{zip_license.name}", index)
     index_text = "iOS third-party license texts\n\n" + "\n".join(index) + "\n\n"
-    index_text += "Rust wm-shader target dependency closure (Cargo metadata):\n" + "\n".join(crate_entries) + "\n"
+    closures = ["Rust wm-shader target dependency closure (Cargo metadata):"]
+    if steam_manifest is not None:
+        closures.append("Rust wm-steam-transport target dependency closure (Cargo metadata):")
+    index_text += "\n".join(closures) + "\n" + "\n".join(crate_entries) + "\n"
     (output / "INDEX.txt").write_text(index_text, encoding="utf-8", newline="\n")
     return index
 
@@ -194,11 +220,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--zipfoundation", type=Path, required=True, help="Resolved ZIPFoundation source checkout.")
     parser.add_argument("--target", default="aarch64-apple-ios")
     parser.add_argument("--cargo", default="cargo")
+    parser.add_argument("--steam-manifest", type=Path, default=None,
+                        help="Optional SteamTransport Cargo.toml whose native dependency closure is included.")
     args = parser.parse_args(argv)
     try:
         entries = generate(args.output.resolve(), args.deps_sources.resolve(), args.cargo_home.resolve(),
                            args.zipfoundation.resolve(), args.cargo, args.target,
-                           deps_downloads=args.deps_downloads.resolve() if args.deps_downloads else None)
+                           deps_downloads=args.deps_downloads.resolve() if args.deps_downloads else None,
+                            steam_manifest=args.steam_manifest.resolve() if args.steam_manifest else None)
     except NoticeError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

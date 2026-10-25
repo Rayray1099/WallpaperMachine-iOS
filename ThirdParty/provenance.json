@@ -1,5 +1,16 @@
 {
   "application": "WallpaperMachine",
+  "steam_cdn": {
+    "repository": "https://crates.io/crates/steam-cdn",
+    "crate": "steam-cdn",
+    "version": "1.0.0",
+    "revision": "5506382590450a77e11c77026aa03cbd7a74cd3d",
+    "archive_sha256": "48a8311e77f9cae1aca69e296450608f9cb389279c183fd833d8a32c6ce71eca",
+    "license": "Apache-2.0",
+    "directory": "ThirdParty/steam-cdn",
+    "modified": true,
+    "note": "Exact published crate source copied from artifacts/ios-workshop/crates/steam-cdn-1.0.0; license notice preserved. Security hardening and precise patch inventory are documented in ThirdParty/steam-cdn/PATCHES.md."
+  },
   "mediaRemoteAdapter": {
     "repository": "https://github.com/ungive/mediaremote-adapter",
     "revision": "73f14ab1568371e6e3c44063f21c34c5e2712c4d",

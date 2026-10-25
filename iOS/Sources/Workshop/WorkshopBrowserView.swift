@@ -10,6 +10,8 @@ import UIKit
 /// the detail sheet says so and offers Steam's item page plus the real folder importer.
 struct WorkshopBrowserView: View {
     @ObservedObject private var library: LibraryStore
+    let contentDownloads: WorkshopContentDownloadStore
+    @State private var showNativeSignIn = false
     @State private var store: WorkshopStore
     @State private var activeSheet: WorkshopSheet?
     @State private var showingImporter = false
@@ -21,9 +23,10 @@ struct WorkshopBrowserView: View {
     @Environment(\.openURL) private var openURL
 
     @MainActor
-    init(library: LibraryStore) {
+    init(library: LibraryStore, contentDownloads: WorkshopContentDownloadStore) {
         _library = ObservedObject(wrappedValue: library)
         _store = State(initialValue: WorkshopStore(library: library))
+        self.contentDownloads = contentDownloads
     }
 
     var body: some View {
@@ -47,6 +50,7 @@ struct WorkshopBrowserView: View {
         .onChange(of: store.page) { _, newValue in
             pageText = String(newValue)
         }
+        .sheet(isPresented: $showNativeSignIn) { WorkshopContentSignInView(store: contentDownloads) }
         .sheet(item: $activeSheet, onDismiss: {
             store.cancelSteamSignIn()
         }) { sheet in
@@ -68,7 +72,7 @@ struct WorkshopBrowserView: View {
             case .updates:
                 WorkshopUpdatesView(store: store, library: library)
             case .detail(let item):
-                WorkshopDetailView(item: item, store: store, library: library)
+                WorkshopDetailView(item: item, store: store, library: library, contentDownloads: contentDownloads)
             }
         }
         .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.folder]) { result in
@@ -187,6 +191,14 @@ struct WorkshopBrowserView: View {
                 .accessibilityIdentifier("wm.workshop.list.\(list.rawValue)")
             }
             Spacer(minLength: 0)
+            Button {
+                if contentDownloads.signedIn { contentDownloads.signOut() }
+                else { showNativeSignIn = true }
+            } label: {
+                Label(contentDownloads.signedIn ? WS("Native download session", "原生下載工作階段") : WS("Sign in for downloads", "登入以下載"), systemImage: "arrow.down.circle").font(.caption)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("wm.workshop.content-signin")
             if store.subscriptionAccountLabel != nil {
                 Button {
                     showingSignOut = true

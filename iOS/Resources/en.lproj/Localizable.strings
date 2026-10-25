@@ -160,6 +160,15 @@
 "context.unfavorite" = "Remove from Favorites";
 
 "workshop.title" = "Workshop";
+"workshop.native.signIn" = "Sign in for downloads";
+"workshop.native.signOut" = "Sign out of native Steam";
+"workshop.native.download" = "Download with Steam";
+"workshop.native.downloadUpdate" = "Download update";
+"workshop.native.cancel" = "Cancel download";
+"workshop.native.experimental" = "Experimental native Steam download";
+"workshop.native.guard" = "Enter the Steam Guard code sent to you, or approve the sign-in on your Steam device.";
+"workshop.native.ownership" = "Your Steam account must own Wallpaper Engine.";
+"workshop.native.notVerified" = "Experimental: downloads have not been verified against live Steam ownership or on a device.";
 "workshop.preview.failed" = "Author preview failed to load.";
 "workshop.preview.retry" = "Retry";
 "workshop.preview.downloading" = "Downloading…";

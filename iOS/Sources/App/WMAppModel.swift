@@ -33,6 +33,7 @@ final class WMAppModel: ObservableObject {
     let library: LibraryStore
     let microphone = WMMicrophoneController()
     let microphoneResponse = MicrophoneAudioResponse()
+    let workshopDownloads: WorkshopContentDownloadStore
 
     @Published var sidebarSelection: WMSidebarSelection = .all
     @Published var selectedItemID: WallpaperItem.ID?
@@ -63,6 +64,7 @@ final class WMAppModel: ObservableObject {
 
     init(library: LibraryStore) {
         self.library = library
+        self.workshopDownloads = WorkshopContentDownloadStore(library: library)
         // The app model is the single observable the views watch, so changes the
         // store publishes (imports, external edits) reach SwiftUI as well.
         libraryObserver = library.objectWillChange.sink { [weak self] _ in

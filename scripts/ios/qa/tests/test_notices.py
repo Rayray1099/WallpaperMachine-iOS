@@ -54,6 +54,26 @@ class CargoClosureTests(unittest.TestCase):
             self.assertIn("--target", commands[0])
             self.assertEqual(commands[0][-2:], ["-f", "{p}|{l}"])
 
+    def test_steam_closure_uses_root_package_without_features_and_normal_edges(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            manifest = Path(temporary) / "Cargo.toml"
+            manifest.write_text("", encoding="utf-8")
+            tree = subprocess.CompletedProcess([], 0, "wm-steam-transport v0.1.0|GPL-3.0-only\nfoo v1.2.0|MIT\n", "")
+            metadata = subprocess.CompletedProcess([], 0, json.dumps({"packages": [
+                {"name": "wm-steam-transport", "version": "0.1.0", "manifest_path": str(manifest), "source": None},
+                {"name": "foo", "version": "1.2.0", "manifest_path": str(manifest), "source": "registry"},
+            ]}), "")
+            commands = []
+            outputs = [tree, metadata]
+            def runner(command, **kwargs):
+                commands.append(command)
+                return outputs.pop(0)
+            packages = notices.run_metadata(manifest, "aarch64-apple-ios", "cargo", runner, package="wm-steam-transport")
+            self.assertEqual({item["name"] for item in packages}, {"wm-steam-transport", "foo"})
+            self.assertIn("normal", commands[0])
+            self.assertNotIn("--features", commands[0])
+            self.assertIn("wm-steam-transport", commands[0])
+
     def test_fails_if_cargo_tree_does_not_report_shader_root(self):
         with tempfile.TemporaryDirectory() as temporary:
             manifest = Path(temporary) / "Cargo.toml"
@@ -89,6 +109,21 @@ class LicenseSourceTests(unittest.TestCase):
             found = notices.crate_licenses({"name": "both", "version": "1.0",
                                             "manifest_path": str(manifest)}, Path(temporary))
             self.assertEqual(found, [apache, mit])
+
+    def test_license_file_metadata_path_is_honored_and_missing_text_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            crate = Path(temporary) / "crate"
+            crate.mkdir()
+            manifest = crate / "Cargo.toml"
+            manifest.write_text("[package]", encoding="utf-8")
+            target = crate / "LICENSE.txt"
+            target.write_text("upstream license", encoding="utf-8")
+            item = {"name": "crate", "version": "1.0", "manifest_path": str(manifest),
+                    "license_file": "LICENSE.txt"}
+            self.assertEqual(notices.crate_licenses(item, Path(temporary)), [target])
+            target.unlink()
+            with self.assertRaisesRegex(notices.NoticeError, "no license/notice"):
+                notices.crate_licenses(item, Path(temporary))
 
     def test_license_lookup_fails_closed_when_no_text(self):
         with tempfile.TemporaryDirectory() as temporary:

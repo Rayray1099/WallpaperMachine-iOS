@@ -54,6 +54,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             Renderer/target
+            iOS/SteamTransport/target
             ~/.ccache
           key: ios-renderer-${{ runner.os }}-${{ hashFiles('Renderer/Cargo.lock', 'Renderer/rust-toolchain.toml', 'ThirdParty/provenance.json', 'scripts/ios/build_renderer.sh') }}
           restore-keys: |

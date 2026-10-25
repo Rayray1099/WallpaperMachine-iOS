@@ -17,9 +17,10 @@ serde_json = "1.0"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "fs", "io-util", "macros", "time"] }
 sha1 = "0.10"
 steam-vent = "=0.3.1"
-steam-cdn = "=1.0.0"
+steam-cdn = { path = "../../ThirdParty/steam-cdn", version = "=1.0.0" }
 keyvalues-parser = "0.2"
 zeroize = "1"
+futures-util = "0.3"
 # bytes>=1.10 added Buf::try_get_u32, shadowing steam-cdn1's checked parser.
 bytes = "=1.9.0"
 # steam-cdn's default reqwest TLS uses OpenSSL; build it from source for iOS,

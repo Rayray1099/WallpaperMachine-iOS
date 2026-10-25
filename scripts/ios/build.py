@@ -330,6 +330,27 @@ def build_renderer(toolchain: dict, artifacts: Path, skip: bool, verbose: bool) 
         raise BuildError(f"{rel(archive)} is only {archive.stat().st_size} bytes; not a real renderer archive")
 
 
+def build_steam(toolchain: dict, artifacts: Path, verbose: bool) -> None:
+    manifest = IOS / "SteamTransport/Cargo.toml"
+    env = os.environ.copy()
+    env["DEVELOPER_DIR"] = toolchain["selected_xcode"]
+    env["IPHONEOS_DEPLOYMENT_TARGET"] = DEPLOYMENT_TARGET
+    run_logged(
+        ["cargo", "build", "--manifest-path", str(manifest), "--locked", "--release", "--target", RUST_TARGET],
+        artifacts / "steam-transport-build.log", env, "Build native authenticated Steam transport", verbose,
+    )
+    archive = IOS / f"SteamTransport/target/{RUST_TARGET}/release/libwm_steam_transport.a"
+    if not archive.is_file():
+        raise BuildError("native Steam transport produced no static archive")
+    run_logged(
+        [sys.executable, str(SCRIPT_DIR / "verify_archive.py"), str(archive), "--sdk", SDK_NAME, "--arch", ARCH],
+        artifacts / "steam-transport-validation.log", env, "Verify Steam transport iOS objects", verbose,
+    )
+    output = IOS / "Generated/Steam/lib"
+    output.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(archive, output / archive.name)
+
+
 def run_xcodegen(toolchain: dict, artifacts: Path, verbose: bool) -> None:
     env = os.environ.copy()
     env["DEVELOPER_DIR"] = toolchain["selected_xcode"]
@@ -560,6 +581,7 @@ def main() -> int:
         swift_count = verify_sources()
         print(f"{MARK.ok} iOS/Sources has {swift_count} Swift file(s)", flush=True)
         build_renderer(toolchain, artifacts, args.skip_renderer, args.verbose)
+        build_steam(toolchain, artifacts, args.verbose)
         run_xcodegen(toolchain, artifacts, args.verbose)
         app = build_app(toolchain, artifacts, args.verbose)
         # Legal notices are actual source texts, not a list of license names.
@@ -570,7 +592,8 @@ def main() -> int:
              "--deps-sources", str(deps_cache / "src"),
              "--deps-downloads", str(deps_cache / "downloads"),
              "--zipfoundation", str(DERIVED_DATA / "SourcePackages/checkouts/ZIPFoundation"),
-             "--output", str(app / "Licenses")],
+             "--output", str(app / "Licenses"),
+             "--steam-manifest", str(IOS / "SteamTransport/Cargo.toml")],
             artifacts / "license-notices.log", os.environ.copy(),
             "Bundle source licenses and upstream attribution", args.verbose,
         )

@@ -17,6 +17,7 @@ use steam_vent::proto::{
 use tokio::{io::{AsyncWrite, AsyncWriteExt, AsyncReadExt}, runtime::Runtime, sync::{Notify, oneshot}, task::AbortHandle};
 use std::{pin::Pin, task::{Context, Poll}};
 use keyvalues_parser::Vdf;
+use futures_util::FutureExt;
 
 const APP_ID: u32 = 431960;
 const MAX_FILES: usize = 100_000;
@@ -30,6 +31,9 @@ fn engine() -> &'static Mutex<Engine> { ENGINE.get_or_init(|| Mutex::new(Engine:
 #[derive(Deserialize)] struct Request {
     operation: String, #[serde(default)] account: String, #[serde(default)] password: String,
     #[serde(default)] item_id: String, #[serde(default)] destination: String,
+}
+impl Drop for Request {
+    fn drop(&mut self) { use zeroize::Zeroize; self.account.zeroize(); self.password.zeroize(); }
 }
 #[derive(Clone, Serialize)] struct Status {
     phase: String, received: u64, total: u64, message: String, guard_type: String,
@@ -64,7 +68,12 @@ fn ffi<T: Copy>(f: impl FnOnce() -> T, fallback: T) -> T { std::panic::catch_unw
     e.tasks.retain(|_, j| !j.terminal());
     let id = NEXT.fetch_add(1, Ordering::Relaxed); let job = Job::new(); let worker = job.clone();
     let handle = e.runtime.as_ref().unwrap().spawn(async move {
-        let result = tokio::select! { _ = worker.stop.notified() => Err("cancelled"), result = run(&worker, &mut request) => result };
+        let limit = if request.operation == "login" { 240 } else { 1800 };
+        let result = tokio::select! {
+            _ = worker.stop.notified() => Err("cancelled"),
+            result = tokio::time::timeout(Duration::from_secs(limit), std::panic::AssertUnwindSafe(run(&worker, &mut request)).catch_unwind()) =>
+                result.map(|r| r.unwrap_or(Err("native_failure"))).unwrap_or(Err("operation_timeout"))
+        };
         // Credentials exist only for this request and are erased before it leaves scope.
         use zeroize::Zeroize; request.password.zeroize(); request.account.zeroize();
         match result { Ok(()) => worker.done(), Err("cancelled") => worker.phase("cancelled"), Err(reason) => worker.fail(reason) }
@@ -125,10 +134,12 @@ async fn run(job: &Arc<Job>, req: &mut Request) -> Result<(), &'static str> {
             if req.account.trim().is_empty() || req.account.len() > 128 || req.password.is_empty() || req.password.len() > 1024 { return Err("invalid_credentials"); }
             if session().lock().unwrap().is_some() { return Err("already_signed_in"); }
             job.phase("connecting");
-            let servers = ServerList::discover().await.map_err(|_| "connection_failed")?;
+            let servers = tokio::time::timeout(Duration::from_secs(30), ServerList::discover()).await
+                .map_err(|_| "connection_failed")?.map_err(|_| "connection_failed")?;
             job.phase("authenticating");
             let connection = tokio::time::timeout(Duration::from_secs(240), Connection::login(&servers, &req.account, &req.password, NullGuardDataStore, UIConfirmation(job.clone())))
                 .await.map_err(|_| "login_timeout")?.map_err(|_| "login_rejected")?;
+            { use zeroize::Zeroize; req.password.zeroize(); req.account.zeroize(); }
             job.phase("checking_ownership"); owns_app(&connection).await?;
             *session().lock().unwrap() = Some(Arc::new(connection)); Ok(())
         }

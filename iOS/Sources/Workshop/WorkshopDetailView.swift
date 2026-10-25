@@ -8,6 +8,9 @@ struct WorkshopDetailView: View {
     let item: WorkshopItem
     let store: WorkshopStore
     @ObservedObject private var library: LibraryStore
+    let contentDownloads: WorkshopContentDownloadStore
+    @State private var nativeSignIn = false
+    @State private var guardCode = ""
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -19,9 +22,10 @@ struct WorkshopDetailView: View {
     @State private var canOpenSteamApp = false
 
     @MainActor
-    init(item: WorkshopItem, store: WorkshopStore, library: LibraryStore) {
+    init(item: WorkshopItem, store: WorkshopStore, library: LibraryStore, contentDownloads: WorkshopContentDownloadStore) {
         self.item = item
         self.store = store
+        self.contentDownloads = contentDownloads
         _library = ObservedObject(wrappedValue: library)
     }
 
@@ -39,6 +43,7 @@ struct WorkshopDetailView: View {
 
                     header
                     compatibility
+                    nativeDownloadCard
                     statusCard
                     if !item.summary.isEmpty {
                         Text(verbatim: item.summary)
@@ -94,6 +99,7 @@ struct WorkshopDetailView: View {
                     .accessibilityLabel(WS("More actions", "更多動作"))
                 }
             }
+            .sheet(isPresented: $nativeSignIn) { WorkshopContentSignInView(store: contentDownloads) }
             .fileImporter(
                 isPresented: $showImporter, allowedContentTypes: [.folder]
             ) { result in
@@ -163,6 +169,46 @@ struct WorkshopDetailView: View {
                     "場景桌布需要場景引擎與 Wallpaper Engine 自己的共用素材。本 App 不會重新散布這些素材。"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private var nativeDownloadCard: some View {
+        card {
+            Text(WS("Experimental native Steam download", "實驗性原生 Steam 下載")).font(.headline)
+            Text(WS("Native Steam content sign-in is separate from Community browser sign-in. Wallpaper Engine ownership and Steam Guard are required; collections are not recursively downloaded.", "原生 Steam 內容登入與社群瀏覽器登入分開。需要擁有 Wallpaper Engine 並完成 Steam Guard 驗證；不會遞迴下載合集。"))
+                .font(.callout).foregroundStyle(.secondary)
+            if contentDownloads.isBusy {
+                if let status = contentDownloads.status {
+                    Text(WorkshopContentSignInView.phaseLabel(status.phase))
+                    if status.phase == "guard" {
+                        Text(WS("Steam is awaiting your Guard code or device confirmation.", "Steam 正等待 Guard 驗證碼或裝置確認。"))
+                        TextField(WS("Guard code", "Guard 驗證碼"), text: $guardCode)
+                        Button(WS("Submit Guard code", "提交 Guard 驗證碼")) {
+                            _ = contentDownloads.submitGuard(guardCode); guardCode = ""
+                        }
+                    }
+                    if status.total > 0 {
+                        ProgressView(value: Double(status.received), total: Double(status.total))
+                        Text("\(WorkshopFormat.bytes(Int64(status.received))) / \(WorkshopFormat.bytes(Int64(status.total)))")
+                    } else { ProgressView() }
+                } else { ProgressView() }
+                if contentDownloads.canCancel {
+                    Button(WS("Cancel download", "取消下載"), role: .cancel) { contentDownloads.cancel() }
+                }
+            } else if let error = contentDownloads.errorText {
+                Text(error).foregroundStyle(.red)
+                Button(WS("Try download again", "再次嘗試下載")) { Task { await contentDownloads.download(item) } }
+            } else if contentDownloads.signedIn {
+                Button(store.isInstalled(item) ? WS("Download update", "下載更新") : WS("Download with Steam", "使用 Steam 下載")) {
+                    Task { await contentDownloads.download(item) }
+                }.buttonStyle(.borderedProminent).disabled(item.isCollection || item.isApplication)
+            } else {
+                Button(WS("Sign in for downloads", "登入以下載")) { nativeSignIn = true }
+                    .buttonStyle(.borderedProminent).disabled(item.isCollection || item.isApplication)
+            }
+            if contentDownloads.signedIn {
+                Button(WS("Sign out of native Steam", "登出原生 Steam"), role: .destructive) { contentDownloads.signOut() }
             }
         }
     }

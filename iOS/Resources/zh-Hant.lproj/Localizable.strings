@@ -160,6 +160,15 @@
 "context.unfavorite" = "移出我的最愛";
 
 "workshop.title" = "工作坊";
+"workshop.native.signIn" = "登入以下載";
+"workshop.native.signOut" = "登出原生 Steam";
+"workshop.native.download" = "使用 Steam 下載";
+"workshop.native.downloadUpdate" = "下載更新";
+"workshop.native.cancel" = "取消下載";
+"workshop.native.experimental" = "實驗性原生 Steam 下載";
+"workshop.native.guard" = "輸入傳送給你的 Steam Guard 驗證碼，或在 Steam 裝置上核准登入。";
+"workshop.native.ownership" = "Steam 帳號必須擁有 Wallpaper Engine。";
+"workshop.native.notVerified" = "實驗功能：尚未以真實 Steam 擁有權或實機驗證下載。";
 "workshop.preview.failed" = "作者預覽載入失敗。";
 "workshop.preview.retry" = "重試";
 "workshop.preview.downloading" = "正在下載…";

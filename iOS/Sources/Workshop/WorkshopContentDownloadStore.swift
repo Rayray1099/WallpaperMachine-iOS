@@ -1,0 +1,185 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import Foundation
+import Observation
+
+struct SteamTransportStatus: Decodable {
+    let phase: String
+    let received: UInt64
+    let total: UInt64
+    let message: String
+    let guard_type: String
+    var isTerminal: Bool { ["done", "error", "cancelled"].contains(phase) }
+    var fraction: Double? {
+        guard total > 0 else { return nil }
+        return min(1, Double(received) / Double(total))
+    }
+}
+
+/// Exactly one operation owns its staging directory until native I/O is terminal
+/// AND the library import has completed. Browser cookies never authorize this path.
+@MainActor @Observable
+final class WorkshopContentDownloadStore {
+    private(set) var status: SteamTransportStatus?
+    private(set) var signedIn = false
+    private(set) var isBusy = false
+    private(set) var isImporting = false
+    private(set) var cancellationRequested = false
+    private(set) var errorText: String?
+    private(set) var currentItemID: String?
+    private var taskID: UInt64 = 0
+    private var pollTask: Task<Void, Never>?
+    private weak var library: LibraryStore?
+    private var jobFolder: URL?
+    var canCancel: Bool { taskID != 0 && isBusy && !cancellationRequested && !isImporting }
+
+    init(library: LibraryStore) { self.library = library }
+
+    /// Copies credentials synchronously across the C boundary; no async Swift
+    /// task retains the form's password or JSON payload while waiting for Guard.
+    func signIn(account: String, password: String) {
+        guard !isBusy else { return }
+        guard let id = start(["operation": "login", "account": account, "password": password]) else { return }
+        pollTask = Task { await monitor(id, operation: "login", item: nil) }
+    }
+
+    func download(_ item: WorkshopItem) async {
+        guard !isBusy else { return }
+        guard signedIn else { errorText = Self.localizedError("content_signin_required"); return }
+        guard WorkshopParsing.isWorkshopID(item.id), !item.isCollection, !item.isApplication else {
+            errorText = Self.localizedError("item_type_unsupported"); return
+        }
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WorkshopDownload-" + UUID().uuidString, isDirectory: true)
+            .appendingPathComponent(item.id, isDirectory: true)
+        do { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
+        catch { errorText = Self.localizedError("write_failed"); return }
+        jobFolder = folder
+        guard let id = start(["operation": "download", "item_id": item.id, "destination": folder.path]) else {
+            cleanupOwnedFolder(); return
+        }
+        currentItemID = item.id
+        pollTask = Task { await monitor(id, operation: "download", item: item) }
+        await pollTask?.value
+    }
+
+    func submitGuard(_ code: String) -> Bool {
+        guard taskID != 0, status?.phase == "guard", !cancellationRequested else { return false }
+        return code.withCString { wm_steam_guard(taskID, $0) != 0 }
+    }
+
+    func cancel() {
+        guard canCancel else { return }
+        cancellationRequested = true
+        wm_steam_cancel(taskID)
+        // Never cancel the polling task or remove the folder while native writes
+        // may still be in flight. Completion and cancellation may race.
+    }
+
+    func signOut() {
+        guard !isBusy else { return }
+        let id = Self.startNative(["operation": "logout"])
+        guard id != 0 else { errorText = Self.localizedError("busy"); return }
+        signedIn = false; status = nil; errorText = nil; currentItemID = nil
+    }
+
+    private static func startNative(_ request: [String: String]) -> UInt64 {
+        guard let data = try? JSONSerialization.data(withJSONObject: request),
+              let payload = String(data: data, encoding: .utf8) else { return 0 }
+        return payload.withCString { wm_steam_start($0) }
+    }
+
+    private func start(_ request: [String: String]) -> UInt64? {
+        guard !isBusy else { return nil }
+        let id = Self.startNative(request)
+        guard id != 0 else { errorText = Self.localizedError("busy"); return nil }
+        taskID = id; status = nil; errorText = nil
+        isBusy = true; isImporting = false; cancellationRequested = false
+        return id
+    }
+
+    private func monitor(_ id: UInt64, operation: String, item: WorkshopItem?) async {
+        let deadline = Date().addingTimeInterval(operation == "login" ? 240 : 1_800)
+        while taskID == id {
+            if Date() >= deadline && !cancellationRequested {
+                errorText = Self.localizedError(operation == "login" ? "login_timeout" : "download_timeout")
+                cancel()
+            }
+            if let pointer = wm_steam_poll(id) {
+                let text = String(cString: pointer)
+                wm_steam_free(pointer)
+                if let data = text.data(using: .utf8), let result = try? JSONDecoder().decode(SteamTransportStatus.self, from: data) {
+                    status = result
+                    if result.isTerminal {
+                        // Native is finished even if a done/error won the race
+                        // with cancellation. It is now safe to clean our staging.
+                        taskID = 0
+                        if cancellationRequested || result.phase == "cancelled" {
+                            if operation == "login", result.phase == "done" { _ = Self.startNative(["operation": "logout"]) }
+                            cleanupOwnedFolder(); finish(); return
+                        }
+                        if result.phase == "error" {
+                            errorText = Self.localizedError(result.message)
+                            cleanupOwnedFolder(); finish(); return
+                        }
+                        if operation == "login" { signedIn = true; finish(); return }
+                        if let item { await importCompletedDownload(item) }
+                        finish(); return
+                    }
+                }
+            }
+            // This task is deliberately not cancelled while native I/O owns the
+            // folder. The app may hide the sheet without abandoning the download.
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+    }
+
+    private func importCompletedDownload(_ item: WorkshopItem) async {
+        guard let folder = jobFolder, let library,
+              FileManager.default.fileExists(atPath: folder.appendingPathComponent("project.json").path) else {
+            errorText = Self.localizedError("wallpaper_project_missing"); cleanupOwnedFolder(); return
+        }
+        isImporting = true
+        // Keep the operation busy through this await; no second job can replace
+        // jobFolder or report an old item's download as the current one.
+        library.errorMessage = nil
+        await library.importURL(folder)
+        if library.errorMessage != nil || !library.items.contains(where: { $0.workshopID == item.id }) {
+            errorText = library.errorMessage ?? Self.localizedError("import_failed")
+        } else {
+            errorText = nil
+        }
+        cleanupOwnedFolder()
+    }
+
+    private func finish() {
+        isBusy = false; isImporting = false; cancellationRequested = false
+        taskID = 0; pollTask = nil
+    }
+
+    private func cleanupOwnedFolder() {
+        guard let folder = jobFolder else { return }
+        let base = FileManager.default.temporaryDirectory.standardizedFileURL.resolvingSymlinksInPath()
+        let target = folder.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath()
+        guard target.deletingLastPathComponent() == base,
+              target.lastPathComponent.hasPrefix("WorkshopDownload-"),
+              UUID(uuidString: String(target.lastPathComponent.dropFirst("WorkshopDownload-".count))) != nil else { return }
+        try? FileManager.default.removeItem(at: target)
+        jobFolder = nil
+    }
+
+    private static func localizedError(_ reason: String) -> String {
+        switch reason {
+        case "ownership_required": WS("This Steam account must own Wallpaper Engine.", "此 Steam 帳號必須擁有 Wallpaper Engine。")
+        case "content_signin_required": WS("Sign in for downloads first.", "請先登入以下載。")
+        case "login_rejected", "invalid_credentials": WS("Steam sign-in was not accepted. Check credentials or Guard code.", "Steam 登入未獲接受，請檢查帳號密碼或 Guard 驗證碼。")
+        case "login_timeout", "connection_failed": WS("Steam could not be reached in time. Try again.", "無法及時連線至 Steam，請重試。")
+        case "download_timeout": WS("The download timed out.", "下載逾時。")
+        case "item_access_denied", "item_unavailable", "item_type_unsupported": WS("Steam could not authorize this Workshop item.", "Steam 無法授權此工作坊項目。")
+        case "manifest_missing", "manifest_failed", "manifest_access_denied", "manifest_mismatch": WS("Steam could not provide a valid item manifest.", "Steam 無法提供有效的項目清單。")
+        case "depot_access_denied", "app_access_denied", "ownership_check_failed": WS("Steam denied Wallpaper Engine content access for this account.", "Steam 拒絕此帳號存取 Wallpaper Engine 內容。")
+        case "wallpaper_project_missing": WS("The download is missing its project file.", "下載內容缺少專案檔案。")
+        case "import_failed": WS("The library did not install this Workshop item.", "媒體庫未能安裝此工作坊項目。")
+        default: WS("The download failed. Check Steam access and try again.", "下載失敗，請檢查 Steam 存取權限後重試。")
+        }
+    }
+}

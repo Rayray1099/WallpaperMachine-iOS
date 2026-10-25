@@ -52,7 +52,7 @@ struct WMWorkshopSheet: View {
 
     var body: some View {
         WMSheetContainer(titleKey: "workshop.title", onClose: { model.isWorkshopPresented = false }) {
-            WorkshopBrowserView(library: model.library)
+            WorkshopBrowserView(library: model.library, contentDownloads: model.workshopDownloads)
                 .accessibilityIdentifier("wm.workshop")
         }
         .wmErrorAlert(model: model)

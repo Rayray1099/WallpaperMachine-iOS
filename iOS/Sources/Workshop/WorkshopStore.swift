@@ -4,13 +4,9 @@ import Observation
 import FoundationNetworking
 #endif
 
-/// The Workshop page's state: the draft controls, the committed query, paging, the cache,
-/// the public Steam Community session and the update check.
-///
-/// Everything here is real Steam traffic or the shared `LibraryStore`; nothing fakes a
-/// download. The iOS build has no authorized Steam content downloader, so an item's only
-/// install path is a folder the person already obtained through Steam on a computer. The
-/// browser exposes that handoff and the importer honestly.
+/// The Workshop page's state: draft controls, committed query, paging, cache,
+/// the public Steam Community session and update check. Authenticated content transfer
+/// is owned by the separate native Steam content store.
 @MainActor
 @Observable
 final class WorkshopStore {
@@ -142,8 +138,7 @@ final class WorkshopStore {
         updates.available[item.id]
     }
 
-    /// What the detail view may offer for this item. There is deliberately no `.download`
-    /// case: no authorized iOS downloader exists.
+    /// What the detail view may offer based on public metadata and current library state.
     func availability(for item: WorkshopItem) -> WorkshopDownloadAvailability {
         if item.isCollection { return .collection }
         if item.isApplication { return .unsupportedApplication }
