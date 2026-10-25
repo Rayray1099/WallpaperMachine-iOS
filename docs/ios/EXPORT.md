@@ -26,4 +26,4 @@ The share sheet can pass an archive to compatible AirCard versions. No direct Ai
 
 ## Verification
 
-Source syntax parsed on Windows. Actual MP4 encoding, numbered output contents, tendies import, longer export behavior, portrait/landscape crop and background/foreground recovery still require native build and physical-device tests. See STATUS.md for current build/device state.
+Source syntax and portable export-core typechecks passed on Windows; the complete export source now compiles in the actual ARM64 iOS Release app on macOS Actions. Compilation does not execute AVAssetWriter or establish output correctness. Actual MP4 encoding, numbered output contents, tendies import, longer export behavior, portrait/landscape crop and background/foreground recovery require runtime tests, deferred while the user's iPad is away. See STATUS.md for current build/device state.

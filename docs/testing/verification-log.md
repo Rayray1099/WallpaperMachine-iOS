@@ -25,6 +25,25 @@ and moves whatever falls past ten verbatim into a monthly file under
 [archive/](archive/); promote anything durable before it goes. Editing an
 entry's recorded result is not allowed.
 
+## 2026-10-25 — Final iOS microphone-source build artifact
+
+- Actions40164217807 source9ff8f083: Release native engine+Swift app compile, source notices, unsigned IPA packaging and structural validation PASS.
+- Downloaded final IPA5777278bytes SHA256 eec01ca1a75f1868105e130735eb3135ee4df87730d22572ee2b4712f30e6dc4; independent Windows hash/CRC/IPA checks PASS, arm64 device iOS18 floor, unsigned, en+zh-Hant.
+- Linked executable includes actual C++ owe_scene_wallpaper_new and Rust rs_shader_compile_program;74 bundled legal files checked. Not prerecorded scene-video substitution.
+- Shared microphone-to-web lifecycle source is included in compiled artifact. Pure gate six-case harness passed; microphone permission/capture runtime is not physically verified.
+- Physical signing/install/testing deferred by user taking the iPad away. No further device RPCs after that instruction; no app FPS/memory/scene appearance claims.
+
+## 2026-10-25 — Native iOS ARM64 build and unsigned IPA validation
+
+- Preserved existing implementation and upstream history; committed/pushed ios/main to authorized private repository, no release tag/version bump.
+- Real macOS Actions40164005806 (b2f8810b), Xcode26.3/iPhoneOS SDK26.2: native Rust wm-shader + C++ engine, Swift app, legal source texts, IPA package and validation PASS.
+- Renderer archive contains639 arm64 iOS Mach-O objects; downloaded IPA also contains linked owe_scene_wallpaper_new and rs_shader_compile_program symbols.
+- Actual downloaded unsigned IPA: 5756147 bytes; SHA256 d77c905186e095f546f5e0a0f5fe1381abf1ebf4c7420fdfa6373e507523fa46; ZIP CRC, structure, unsigned arm64 iOS, English/zh-Hant and74 license files independently checked on Windows.
+- python -m unittest discover -s scripts/ios/qa/tests -p test_*.py:119 PASS in continuation checkout; three source-input smoke cases skip without local downloaded inputs.
+- Shared microphone web-feed eligibility: Foundation-only helper typecheck and compiled standalone six-case execution PASS; native XCTest still deferred.
+- Upstream python scripts/test.py fails Windows-oriented prerequisites; scripts/check_renderer.py blocked by missing Homebrew; no macOS GPU/unit regression pass claimed.
+- Physical iPad testing explicitly deferred by user. No LAN transfer/signing/installation/app FPS or memory measurements performed.
+
 ## 2026-10-25 — iOS native host and build-contract checkpoint
 
 - Preserved existing port and upstream history; reconciled Rust wm-shader + C++ C ABI renderer outputs and unsigned device build contracts.
@@ -106,27 +125,3 @@ A React page that assigns `wallpaperPropertyListener` while it renders (issue #6
 - `Tests/Unit/WebWallpaper/` (`WebWallpaperAuthorAPITests`, `WebWallpaperSuspensionTests`) updated and extended; not compiled or run locally
 - Native stage of `python3 scripts/test.py` — not run: no Rust or renderer Homebrew packages here, so the test host does not link; left to CI on the pull request. Python script tests not rerun after rebasing onto f2d6862e (no Python change)
 - Not compared with Wallpaper Engine's frame (VM not used); not checked on the desktop; no Release build
-
-## 2026-10-21 — Opt-in compiler uniform-layout diagnostics
-
-- python3 scripts/check_rust.py --observer-uniform-layout: ordinary and diagnostic stages passed; normal shader990 and observer shader1001 reported tests,9core exclusions and guarded shader skips retained.
-- Actual C callers compiled and ran once per mode from the same owned synthetic request: ordinary reflection, annotation metadata, MSL and stage payloads matched; identities/cache keys differed; physical Boolean, widened matrix and padded-array metadata survived the existing accessor.
-- The C smoke restored the ordinary static archive afterward. This observes compiler-origin metadata, not native Metal layout, active variants, bound buffers, draws or image parity.
-- Final composed python3 scripts/check_rust.py:2267reported passes (388core/872bridge/17integration/990shader),9core exclusions.
-- python3 scripts/build.py --renderer-only: passed with generated bindings preserved; python3 scripts/check_renderer.py: passed,12generated pairs/reload coverage,17asset/corpus skips.
-- python3 scripts/test.py:425Python and3930native passed;46native skips. No permission, hardware-audio, desktop, private-corpus or network opt-in.
-- Retired57assertion-mapped inherited cases while retaining contributor/Henry islands. Earlier failed consumer source/logs and corrected fixture/contract assumptions remain preserved; no failure was relabeled.
-- No Release app build or launch; licensing/rights clearance, current-main reconciliation and native effects acceptance remain separate.
-
-## 2026-10-21 — Independent bridge lifecycle and state units
-
-Bounded independent replacements; existing renderer policy, public APIs and contributor-owned feature islands retained. This is not whole-project licensing clearance.
-
-- python3 scripts/check_rust.py — 2241 reported passes (394 core, 839 bridge, 17 integration, 991 shader); 9 explicit core exclusions and 31 guarded shader skip messages.
-- python3 scripts/build.py --renderer-only — passed; bindings regenerated without API changes.
-- python3 scripts/check_renderer.py — all registered targets passed; 12 generated pooled/isolated comparisons and 8x2 reload cycles passed; 17 asset/corpus cases skipped.
-- Timer contract passed; 42 delivered draws were a diagnostic measurement, not a throughput guarantee. Production scheduling was unchanged.
-- python3 scripts/test.py — 425 Python tests and 3930 native tests passed; 46 native tests skipped.
-- Standalone compiled consumer — genuine core callback cell and production first-frame dispatcher passed ordered delivery, actual pending-send cancellation/join, owner release, stale callback inertia and replacement without replay.
-- Mounted actor/state cases retain real builder, callback, journal and six persistence branches. Natural last-owner actor retention failed before the shared runtime-owner fix; final lifecycle and concurrent-drop cases passed. Earlier failures remain recorded.
-- No desktop, hardware audio, private corpus, permission prompts, native complete-assembly proof or Release delivery. Contributor-grant filing and remaining protected code/resources are separate.

@@ -152,6 +152,7 @@ what it checked rather than failing open.
 | `iOS/Tests/Unit/Library/AssetPathSecurityTests.swift` | traversal, absolute/colon paths, symlink escape, root loop |
 | `iOS/Tests/Unit/Library/LibraryStoreSecurityTests.swift` | contained URLs, import symlink refusal, backup traversal refusal |
 | `iOS/Tests/Unit/Library/LibraryStorePersistenceTests.swift` | save/reload, favorites/edits, backup round-trip, corrupt/future backups, removal |
+| `iOS/Tests/Unit/Media/MicrophoneCaptureEligibilityTests.swift` | enabled/active/visible capture gate, negative/zero/multiple consumers; no microphone hardware |
 | `iOS/Tests/UI/WallpaperMachineIOSUITests.swift` | full `wm.*` contract on launch, settings sheet, item preview/export |
 
 Tests use a unique temporary directory and clean it in teardown; they never touch
