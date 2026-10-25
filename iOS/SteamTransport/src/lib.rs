@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 use std::{collections::{HashMap, HashSet}, ffi::{CStr, CString}, os::raw::c_char,
-    path::{Component, Path, PathBuf}, ptr, sync::{Arc, Mutex, OnceLock},
+    path::{Component, PathBuf}, ptr, sync::{Arc, Mutex, OnceLock},
     sync::atomic::{AtomicU64, Ordering}, time::Duration};
 use steam_vent::{Connection, ConnectionTrait, ServerList};
 use steam_vent::auth::{AuthConfirmationHandler, ConfirmationAction, ConfirmationMethod,
@@ -116,7 +116,7 @@ async fn owns_app(connection: &Connection) -> Result<(), &'static str> {
         steamid: Some(connection.steam_id().into()), include_played_free_games: Some(true),
         ..Default::default()
     }).await.map_err(|_| "ownership_check_failed")?;
-    if !response.games.iter().any(|game| game.appid() == APP_ID) { return Err("ownership_required"); }
+    if !response.games.iter().any(|game| game.appid() == APP_ID as i32) { return Err("ownership_required"); }
     Ok(())
 }
 async fn run(job: &Arc<Job>, req: &mut Request) -> Result<(), &'static str> {
@@ -180,7 +180,7 @@ async fn download(job: &Arc<Job>, req: &Request) -> Result<(), &'static str> {
     if item.file_type() == 2 || item.tags.iter().any(|t| t.tag() == "Application") { return Err("item_type_unsupported"); }
     let manifest_id = item.hcontent_file(); if manifest_id == 0 { return Err("manifest_missing"); }
     let depot = workshop_depot(&connection).await?;
-    let cdn = steam_cdn::CDNClient::new(connection).await.map_err(|_| "content_connection_failed")?;
+    let cdn = steam_cdn::CDNClient::discover(connection).await.map_err(|_| "content_connection_failed")?;
     let key = cdn.get_depot_decryption_key(APP_ID, depot).await.map_err(|_| "depot_access_denied")?.ok_or("depot_access_denied")?;
     let code = cdn.get_manifest_request_code(APP_ID, depot, manifest_id).await.map_err(|_| "manifest_access_denied")?;
     if code == 0 { return Err("manifest_access_denied"); }
