@@ -186,6 +186,23 @@ The same limitation applies to the app: live-device QA cannot run until CI has
 produced/installed a build and the Lead hands the lane. A missing live run is
 reported as not verified, never as passed.
 
+## Physical checkpoint: 2026-10-25
+
+These are bounded device observations, not a blanket parity claim. See [STATUS.md](STATUS.md) and [EXPORT.md](EXPORT.md) for the owning feature boundaries.
+
+| Check | Observed result | Not established |
+|---|---|---|
+| Release/native package | Latest `b4f87626`: actual ARM64 Release build 40185800564 plus 21 macOS Foundation filesystem checks; unchanged native transport previously passed 4 + 18 tests in 40181346861; original IPA independently validated | Simulator XCTest, signed-release trust or legal clearance |
+| Native Workshop | User-authenticated item 3799142774 completed download, native verification and import; **In your library / Download update** plus new library item | Intermediate byte-progress capture, cancellation, update/recovery or more items; compression format of live chunks was not recorded |
+| Downloaded web playback | Real WKWebView opened for that item, sampled content black | Author thumbnail/animated preview is not playback; root/assets/author features need actual project evidence |
+| Copied CodeTime web | Allowlisted user project 3419679793 imported, actual current clock advanced, page theme switch changed appearance | Small preview crops the large author layout; not full viewport/property/WebGL parity |
+| Copied Dune video | Allowlisted H.264 project 1403625644 imported; four distinct native preview samples, three transitions, 3.1562% changed-area coverage in a conservative inset crop | Measured FPS, sustained playback or correct loop; no source audio track |
+| Live web tendies | Synthetic canvas on `ff15056f`: default 30 requested FPS drift error; reduced 10 requested FPS / 2 s completed 20 frames, 1668×2420, 2,230,932 bytes | That archive predates CAML geometry correction; OS playback not passed |
+| Corrected web tendies | Installed `326dd9d1`: 20 frames, 1668×2420, 2,222,209 bytes; actual returned archive passed 75 checks including all JPEG decodes/changes, ordered refs, centered CAML and matching metadata IDs; AirCard imported it as one Collections descriptor | Wide web strip letterboxed with about 874-pixel top/bottom bars; no private CAML runtime, system Flash/respring or exact loop cadence |
+| Packed scenes | Initial `55579c69` physical import failed with unsafe-path error. Corrected `b4f87626` Release 40185800564 passed actual macOS Foundation 21 checks; user installed/retried, then RPC confirmed new scene library item plus previous five items | Import only: empty synthetic scene is not renderer proof; real scenes held for missing licensed shared assets; special actual `/var` alias variant explicitly skipped in CI |
+
+Copied real-project source hashes, sizes, timestamps and identities were unchanged before/after ZIP creation. No asset contents, device screenshots, supplied dylib or local injected IPA are committed. The temporary receiver accepts only exact named synthetic outputs and does not grant app-filesystem or personal-library access.
+
 ## Known gaps and reporting rules
 
 - `wm.preview`/`wm.export` live in an item's detail screen. The UI test skips that

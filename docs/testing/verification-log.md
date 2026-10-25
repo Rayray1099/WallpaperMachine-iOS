@@ -25,6 +25,30 @@ and moves whatever falls past ten verbatim into a monthly file under
 [archive/](archive/); promote anything durable before it goes. Editing an
 entry's recorded result is not allowed.
 
+## 2026-10-25 — Canonical asset-root regression reproduced and packed iPad import retested
+
+- Physical55579c69 packed-scene import FAILED: user observed Unsafe imported asset path: scene.json; library unchanged. This is retained as failure, not inferred success from a disappearing picker.
+- General AssetPath correction b4f87626 builds normalized validated components from canonicalRoot, preserves containment and refuses child links including dangling links; no wallpaper-ID/title specialcase. Source review and Windows actual Foundation21checks passed.
+- Actual macOS Foundation executable in Actions40185800564 reproduced old algorithm false containment rejection2/2 synthetic root-alias cases plus raw-backslash mismatch; corrected21checks passed. Actual /var-to-/private/var variant explicitlySKIPPED because runner temporary root notunder/privatevar; no false23check claim.
+- Full actual ARM64 native/Swift Release build/package/validation40185800564 PASS. Original IPA11,791,067bytes SHA256593a818701270dc0c8d656edf3b49bcaefd36ee50820c5762e22f111e49b147c;857safeCRCentries,definedengine/shader/5SteamABI,541legal files verified.
+- Separate user-authorized pre-sign exact-dylib copy11,767,593bytes SHA2566034e4192a4839bef4d6b0062c74acb2d495345c262ca9396908617aafbfadf8;onlymainchanged+onedylibadded,all856otherZIPrecordsbyte-identical;LLVMparsesall3. Originaluntouched;no release/version bump.
+- User confirmed installing b4f87626 and retrying same537byte self-authoredPKGV0001 ZIP without errors; officialdeviceRPC thenconfirmed WM QA Packed Scene as newscene-type item with allfiveprioritems preserved. Import passes;emptyobjects is not proofrealMetalrendering.
+- Earlier actual nativeSteam download/import, realCodeTime/Dune tests and75check decodedlivewebarchive remain revision-scoped to326dd9d1. Correctedarchive alsoAirCardimported;noFlash/systemwrites/cache-refresh/Respring.
+- FocusedofflineQA122run119pass3missinglicenseinputskips;staticbuildconfiganddiffchecksPASS. NativeappXCTest remainsdeferred;earlierWindowsroutinegatefailedplatformmodules anddidnotreachXcode. Real scenes stillheldmissinglicensedsharedassets, downloadedRhineLabWKpreviewblack,letterboxedwebcapture/fullscreencomposition unresolved.
+
+## 2026-10-25 — iPad native Workshop download and inspected live tendies export
+
+- Actual macOS ARM64 iOS Release builds40181346724 (326dd9d1) and40183702083 (55579c69) passed full native/Swift compilation, packaging and IPA validation; simulator XCTest explicitly deferred, not passed.
+- Independent original55579c69 IPA verification:11,791,167bytes SHA25697cc74ddcbfe9b7023d03d16b09dd5eb782ba039cc48be3c7d88b99fc2b13b6a;857safe ZIP entries;defined engine/shader/fiveSteamABI symbols;541nonempty legal files byte-identical to prior build.
+- User-authorized separate exact-dylib pre-sign copy independently verified, LCSign re-signed and installed; latest app opened and preserved all five existing library items. Original CI package untouched; no release/version bump.
+- Native workflow40181346861 logs:4transport+18CDN tests pass, actual optimized ARM64 iOS compile. Live user-authenticated Workshop3799142774 completed native download/file verification/library import; final In your library/Download update and new library tile verified. Live chunk compression format was not recorded.
+- Real copy-only CodeTime3419679793 and H264 Dune1403625644 ZIPs imported; source bytes/hashes/timestamps/identities unchanged. CodeTime clock/theme responds but small viewport crops; Dune4distinct inset preview samples/3transitions/3.1562%changed-area coverage, notFPS or loop proof.
+- Corrected326dd9d1 live web-to-tendies10requestedFPS/2s completed20frames1668x2420,2,222,209bytes. Explicit synthetic-only Safari Files transfer returned actual archive SHA25683a51044552a50480bea6e648e36f8c65d87db91ad1b5daab32be214ad9d61b3; temporary receiver stopped.
+- Independent actual-content validation75checks passed:all20JPEGs fully decoded/changing,32CRCs/members,ordered asset refs,centered actualCAML coordinates,2s declared loop,matching IDs/keyed-archive references. Actual wide captured strip letterboxed with about874px bars above/below, not full-screen portrait viewport.
+- Same corrected archive imported into AirCard as Collections/one descriptor/Descriptor Archive/CollectionsPoster target. No Flash/cache refresh/Respring/system wallpaper writes. ExternalID rewrite/private runtime/cadence/recovery remain unverified.
+- Root-level packed-scene import55579c69 portable actual Swift execution and independent review passed;9XCTest methods added, nested missing JSON deliberately rejected. Small real scenes held for missing licensed shared shader/include/texture inputs; synthetic physical import pending human Files confirmation.
+- Final focused offline QA122run/119pass/3missing-source-license-input skips;build.py --check and diff check pass. Earlier routine scripts/test.py failed Windows/Python3.10 platform assumptions,17/25modules passed;Xcode gate not reached,no native XCTest/macOS regression claimed. Downloaded RhineLab realWKpreview black; no author-preview substitution claimed.
+
 ## 2026-10-25 — iPad installation, real export and Steam CDN continuation
 
 - Source ff15056f: macOS Actions 40179227438 passed full ARM64 iOS Release native/Swift compilation, notices, packaging and validation; simulator XCTest remains explicitly deferred.
@@ -107,22 +131,3 @@ Space mode reworked: wallpaper windows of a display in the mode stay on its curr
 - Another disk is simulated with a fake StorageVolumeInspecting; no real external drive, ExFAT disk or eject was exercised.
 - Not checked: Settings › Storage rows and the Wallpaper Library Unavailable window visually, the removable-volume privacy prompt, a live Steam download to a moved library.
 - Renderer built in this worktree with scripts/build.py --renderer-only; bindings unchanged. App not rebuilt as Release.
-
-## 2026-10-24 — Desktop posters kept until the wallpaper changes (issue 79)
-
-macOS 26+ WallpaperAgent keeps a full-size bitmap of every desktop picture file and never deletes it; animated wallpapers made every poster retake a new file. Snapshots that change no display, Space changes, wakes and resumes now keep a settled poster, and a frame nobody asked for never replaces one.
-
-- `python3 scripts/test.py --only DesktopWallpaperTests` — 77 passed; the new hours-of-activity test failed (13 captures instead of 3) with the old two-minute expiry put back temporarily
-- `python3 scripts/test.py` — exit 0; 4070 tests: 4023 passed, 47 opt-in skipped; Python script tests passed; 1 runtime warning (main-thread call) from another class, not raised by DesktopWallpaperTests
-- Not verified: WallpaperAgent's cache on a real Mac (another app's container, not read), real Mission Control thumbnails, `AppDelegate.desktopPosterLayout` (wiring, no unit test); app not rebuilt
-- Space-selection mode still takes posters on every Space visit that switches the wallpaper; not changed here
-
-## 2026-10-23 — Report on GitHub opens the bug form with required fields
-
-- bug_report.yml: What you did, What went wrong, What you expected and the diagnostics report are required; app facts go to optional wallpaper, version and app-details fields.
-- ExternalLink.newIssue opens ?template=bug_report.yml and prefills only those three field ids; no required field is filled by the app.
-- YAML parsed with PyYAML; the app's query names match the form's field ids (grep both sides).
-- python3 scripts/test.py --only ExternalLinkTests --only PanelLibraryStateTests: 20 passed; --only InspectorPolicyTests: 19 passed.
-- python3 scripts/test.py: 4016 passed, 0 failed, 46 skipped (after rebuilding the stale renderer library with build.py --renderer-only).
-- Not checked: GitHub's rendering of the form and the URL prefill; it only takes effect once the template is on the default branch.
-- Blank issues stay on for the body-prefilled link of app versions up to 1.6.0; app not rebuilt.
