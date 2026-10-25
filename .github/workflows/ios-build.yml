@@ -1,6 +1,6 @@
 # Build the unsigned ARM64 iOS app on a GitHub-hosted macOS runner.
 #
-# This workflow only builds, packages and validates artifacts; it never signs,
+# This workflow tests Foundation path containment, builds and validates artifacts; it never signs,
 # tags, creates a release or writes repository contents. It is separate from
 # Build/Release (macOS) and is not called by them. The device app is built with
 # signing disabled; installing it on a physical iPadOS 27 device requires a
@@ -69,6 +69,14 @@ jobs:
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "artifacts=${IOS_ARTIFACTS}" >> "$GITHUB_OUTPUT"
           echo "IOS_ARTIFACTS=${IOS_ARTIFACTS}" >> "$GITHUB_ENV"
+
+      - name: Test Foundation asset containment on macOS
+        run: |
+          set -euo pipefail
+          xcrun swiftc -parse-as-library \
+            iOS/Sources/Models/WallpaperModels.swift scripts/ios/test_asset_paths.swift \
+            -o "${RUNNER_TEMP}/wm-ios-asset-path-tests"
+          "${RUNNER_TEMP}/wm-ios-asset-path-tests" | tee "${IOS_ARTIFACTS}/asset-path-tests.log"
 
       - name: Build renderer and unsigned app
         run: python3 scripts/ios/build.py --artifacts-dir "${IOS_ARTIFACTS}"

@@ -120,16 +120,21 @@ public enum AssetPath {
     public static func resolve(_ path: String, inside root: URL) throws -> URL {
         try validate(path)
         let canonicalRoot = root.standardizedFileURL.resolvingSymlinksInPath()
-        let rootPath = canonicalRoot.path
+        let rootPrefix = canonicalRoot.path.hasSuffix("/") ? canonicalRoot.path : canonicalRoot.path + "/"
         var componentURL = canonicalRoot
         for component in path.replacingOccurrences(of: "\\", with: "/").split(separator: "/") {
             componentURL.appendPathComponent(String(component))
-            if (try? componentURL.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true {
+            // Reading the link destination also detects dangling links, for which
+            // ordinary resource lookup may report only a nonexistent target.
+            if (try? FileManager.default.destinationOfSymbolicLink(atPath: componentURL.path)) != nil
+                || (try? componentURL.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true {
                 throw LibraryError.symbolicLink
             }
         }
-        let result = root.appendingPathComponent(path).standardizedFileURL.resolvingSymlinksInPath()
-        guard result.path.hasPrefix(rootPath + "/") else { throw LibraryError.invalidPath(path) }
-        return result
+        // Keep the canonical root when the leaf does not exist yet (for example,
+        // virtual scene JSON or a new import destination). Resolving the full path
+        // again from an aliased /var root can leave it different from /private/var.
+        guard componentURL.path.hasPrefix(rootPrefix) else { throw LibraryError.invalidPath(path) }
+        return componentURL
     }
 }
