@@ -132,6 +132,7 @@ jobs:
             ${{ steps.meta.outputs.artifacts }}/*.log
             ${{ steps.meta.outputs.artifacts }}/*.json
             ${{ steps.meta.outputs.artifacts }}/checksums.sha256
+            Renderer/Engine/build-ios/*/logs/
           if-no-files-found: warn
           retention-days: 7
 

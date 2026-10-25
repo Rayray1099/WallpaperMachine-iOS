@@ -496,26 +496,9 @@ build_quickjs() {
 }
 
 verify_archive_for_ios() {
-  archive="$1"
-  lipo_info="$(xcrun lipo -info "${archive}" 2>/dev/null || true)"
-  case "${lipo_info}" in
-    *"${ARCH}"*) ;;
-    *) fail "${archive} is not ${ARCH}: ${lipo_info:-no architecture information}" ;;
-  esac
-  temporary="$(mktemp -d)"
-  member="$(xcrun ar -t "${archive}" 2>/dev/null | head -n 1 || true)"
-  if [ -n "${member}" ]; then
-    ( cd "${temporary}" && xcrun ar -x "${archive}" "${member}" ) >/dev/null 2>&1 || true
-    object="$(find "${temporary}" -type f -print -quit)"
-    if [ -n "${object}" ]; then
-      platform="$(xcrun vtool -show-build "${object}" 2>/dev/null | awk '/platform/ { print $2; exit }')"
-      case "${platform}" in
-        IOS|IOS_SIMULATOR) ;;
-        *) fail "${archive} contains a non-iOS object (platform ${platform:-unknown})" ;;
-      esac
-    fi
-  fi
-  rm -rf "${temporary}"
+  # ar's first member is often __.SYMDEF, not an object. Inspect every Mach-O
+  # member with the package validator's parser; never run vtool on the index.
+  python3 "${SCRIPT_DIR}/verify_archive.py" "$1" --sdk "${SDK}" --arch "${ARCH}"
 }
 
 if [ "${BUILD_DEPS}" = "true" ]; then

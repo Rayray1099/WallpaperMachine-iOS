@@ -2,6 +2,8 @@
 
 #include "Utils/Logging.h"
 
+#include <TargetConditionals.h>
+
 #include <atomic>
 #include <cstddef>
 #include <mutex>
@@ -125,8 +127,14 @@ MetalPosterCapture::Outcome MetalPosterCapture::encodeIfRequested(id<MTLCommandB
     // Unified memory is the only configuration this app ships on; the managed
     // path exists so a discrete device still reads back correct pixels rather
     // than stale ones.
+#if TARGET_OS_IPHONE
+    // Managed storage and synchronizeResource are unavailable on iOS, even in
+    // a runtime branch that unified-memory devices would never execute.
+    descriptor.storageMode = MTLStorageModeShared;
+#else
     const bool unified = device_.hasUnifiedMemory;
     descriptor.storageMode = unified ? MTLStorageModeShared : MTLStorageModeManaged;
+#endif
 
     id<MTLTexture> texture = [device_ newTextureWithDescriptor:descriptor];
     if (texture == nil) {
@@ -140,11 +148,13 @@ MetalPosterCapture::Outcome MetalPosterCapture::encodeIfRequested(id<MTLCommandB
         return fail("the final composition could not be encoded into the poster texture");
     }
 
+#if !TARGET_OS_IPHONE
     if (! unified) {
         id<MTLBlitCommandEncoder> blit = [command blitCommandEncoder];
         [blit synchronizeResource:texture];
         [blit endEncoding];
     }
+#endif
 
     auto state = state_;
     [command addCompletedHandler:^(id<MTLCommandBuffer> completed) {

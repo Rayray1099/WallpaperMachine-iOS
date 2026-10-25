@@ -5,7 +5,7 @@ This file records implementation and verification separately. A source implement
 ## Verified environment
 
 - Upstream cloned with history: WallpaperMachine/WallpaperMachine at `f3405f1f528e7ff3bd057cf7a257b2be3e058964`.
-- Authorized private repository created: https://github.com/Rayray1099/WallpaperMachine-iOS ; branch `ios/main`. GitHub login and admin/push permission checked. No source push/build yet at this checkpoint.
+- Authorized private repository created: https://github.com/Rayray1099/WallpaperMachine-iOS ; branch `ios/main`. GitHub login and admin/push permission checked. Initial port pushed as `cea74861`; first macOS Actions run `40162061046` reached Xcode 26.3 / iPhoneOS SDK 26.2 and built pinned C dependencies, then failed in archive verification before Rust/engine/app compilation.
 - Build-contract continuation reviewed the existing renderer, build and UI/media source with at most three workers. Runtime selection is not compiler or device evidence.
 - Official iCTRL manual/schema/client retrieved from the device. Existing saved authorization reused successfully via encrypted protocol v1; no new pairing prompt or bypass. Secrets remain in the normal per-user client store, never repository/artifacts.
 - Device reports iPadOS27.0, runner1.96.1. Screenshot, hierarchy, app launch, activation and tap postcondition verified on a disposable LAN-local test page. Runner foreground detection had stale Notes/PiP state; documented `reset` plus app launch corrected the state. Tap changed button text to `Tap verified`; swipe moved the target from offscreen to onscreen. `settle.screen_changed:false` alone was misleading; postconditions checked. Geometry changed after reset, so coordinate space must be refreshed rather than cached across orientation/state recovery.
@@ -24,7 +24,7 @@ This file records implementation and verification separately. A source implement
 | Audio | Microphone-only AVAudioEngine/FFT source and web adapter | Unify source ownership; scene PCM bridge; permission/device tests. Other-app audio capture unavailable |
 | Export | Real decoded video/image movie/sequence/.tendies writers and integrated settings/share UI | Native build, output playback, longer exports. Live scene/web requires real injected provider, never preview still |
 | Tendies/AirCard | Generated iPad-aware archive structure based on reference source, no 300-frame ceiling | Experimental/unverified OS import, looping, metadata compatibility. No system DB writes or respring performed |
-| Build | Reconciled renderer output root/defaults, actual engine+shader C ABI checks, macOS host-independent ARM64 cross-build, unsigned IPA packaging | First push and real compile/fix cycle; native simulator tests explicitly deferred, not passed |
+| Build | Pushed native port; first real Actions run built QuickJS/FreeType/LZ4 with iPhoneOS SDK 26.2. Archive-index verifier failure fixed with all-object parser checks; desktop-only Metal memory APIs compile-time guarded | Iterate compiler/link/package failures to actual IPA; native simulator tests explicitly deferred, not passed |
 | LCSign | Not yet used | Discover correct installed app, transfer actual IPA, sign authorized identity, install and verify |
 | QA | 100 executable offline Python tests pass; shared model/repository Swift Windows typecheck and all iOS source syntax parse pass | Native XCTest/UI simulator run and actual installed iPad app regressions |
 

@@ -370,6 +370,41 @@ def xcodebuild_command(derived: Path) -> list[str]:
     ]
 
 
+def app_product_candidates(settings: dict, derived_data: Path) -> list[Path]:
+    """Resolve the app target product, falling back to the build's product directory."""
+    selected: list[Path] = []
+    if settings.get("returncode") == 0 and settings.get("stdout", "").startswith("["):
+        try:
+            entries = json.loads(settings["stdout"])
+        except (json.JSONDecodeError, TypeError):
+            entries = []
+        for entry in entries if isinstance(entries, list) else []:
+            if not isinstance(entry, dict) or entry.get("target") != "WallpaperMachineIOS":
+                continue
+            values = entry.get("buildSettings") or {}
+            if not isinstance(values, dict):
+                break
+            target_build_dir = values.get("TARGET_BUILD_DIR")
+            product_name = values.get("FULL_PRODUCT_NAME")
+            if target_build_dir and product_name:
+                candidate = Path(target_build_dir) / product_name
+                if candidate.is_dir():
+                    selected.append(candidate)
+            break
+    if selected:
+        return selected
+    return sorted((derived_data / "Build/Products").glob("Release-iphoneos/*.app"))
+
+
+def build_settings_command(derived: Path) -> list[str]:
+    return [
+        "xcodebuild", "-project", str(XCODEPROJ), "-scheme", "WallpaperMachineIOS",
+        "-configuration", "Release", "-sdk", SDK_NAME,
+        "-destination", "generic/platform=iOS", "-derivedDataPath", str(derived),
+        "-showBuildSettings", "-json",
+    ]
+
+
 def build_app(toolchain: dict, artifacts: Path, verbose: bool) -> Path:
     env = os.environ.copy()
     env["DEVELOPER_DIR"] = toolchain["selected_xcode"]
@@ -382,31 +417,11 @@ def build_app(toolchain: dict, artifacts: Path, verbose: bool) -> Path:
         "Build unsigned Release app for arm64 iOS",
         verbose,
     )
-    settings = run_capture(
-        ["xcodebuild", "-project", str(XCODEPROJ), "-scheme", "WallpaperMachineIOS",
-         "-configuration", "Release", "-sdk", SDK_NAME, "-destination", "generic/platform=iOS",
-         "-showBuildSettings", "-json"],
-        env,
-    )
+    settings = run_capture(build_settings_command(DERIVED_DATA), env)
     (artifacts / "xcodebuild-settings.json").write_text(
         json.dumps(settings, indent=2) + "\n", encoding="utf-8"
     )
-    target_build_dir = None
-    product_name = None
-    if settings["returncode"] == 0 and settings["stdout"].startswith("["):
-        try:
-            entries = json.loads(settings["stdout"])
-            values = entries[0].get("buildSettings", {}) if entries else {}
-            target_build_dir = values.get("TARGET_BUILD_DIR")
-            product_name = values.get("FULL_PRODUCT_NAME")
-        except (json.JSONDecodeError, IndexError, TypeError):
-            pass
-    candidates = []
-    if target_build_dir and product_name:
-        candidates = [Path(target_build_dir) / product_name]
-    else:
-        candidates = sorted((DERIVED_DATA / "Build/Products").glob("Release-iphoneos/*.app"))
-    apps = [path for path in candidates if path.is_dir()]
+    apps = app_product_candidates(settings, DERIVED_DATA)
     if len(apps) != 1:
         raise BuildError(
             "expected one built .app under Release-iphoneos, found "
