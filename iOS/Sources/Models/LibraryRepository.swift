@@ -205,7 +205,7 @@ public final class LibraryRepository {
             object = (try JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         }
         let kind: WallpaperKind
-        let entry: String
+        var entry: String
         if let file = object["file"] as? String {
             entry = file; let type = (object["type"] as? String ?? "").lowercased()
             kind = WallpaperKind(rawValue: type) ?? guessKind(file)
@@ -216,8 +216,22 @@ public final class LibraryRepository {
             else if let name = names.first(where: { isImportable($0) }) { entry = name; kind = guessKind(name) }
             else { throw LibraryError.unsupported(originalName) }
         }
-        let entryURL = try AssetPath.resolve(entry, inside: folder)
-        guard fm.fileExists(atPath: entryURL.path) else { throw LibraryError.missingEntry }
+        var entryURL = try AssetPath.resolve(entry, inside: folder)
+        // A scene manifest names the virtual JSON entry even when publishing packs
+        // it into the same-basename package. The renderer mounts that package and
+        // still reads the original project manifest; do not rewrite its metadata.
+        // Only root entries keep project.json beside the renderer's playback URL.
+        if !fm.fileExists(atPath: entryURL.path), kind == .scene,
+           !entry.contains("/"), !entry.contains("\\"),
+           (entry as NSString).pathExtension.lowercased() == "json" {
+            let package = (entry as NSString).deletingPathExtension + ".pkg"
+            entryURL = try AssetPath.resolve(package, inside: folder)
+            entry = package
+        }
+        guard fm.fileExists(atPath: entryURL.path),
+              try entryURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
+            throw LibraryError.missingEntry
+        }
         var properties: [String: WallpaperProperty] = [:]
         let general = object["general"] as? [String: Any] ?? [:]
         for (key, raw) in general["properties"] as? [String: [String: Any]] ?? [:] {
