@@ -144,7 +144,7 @@ final class WorkshopContentDownloadStore {
         library.errorMessage = nil
         await library.importURL(folder)
         if library.errorMessage != nil || !library.items.contains(where: { $0.workshopID == item.id }) {
-            errorText = library.errorMessage ?? Self.localizedError("import_failed")
+            errorText = Self.localizedError("import_failed")
         } else {
             errorText = nil
         }
@@ -168,18 +168,6 @@ final class WorkshopContentDownloadStore {
     }
 
     private static func localizedError(_ reason: String) -> String {
-        switch reason {
-        case "ownership_required": WS("This Steam account must own Wallpaper Engine.", "此 Steam 帳號必須擁有 Wallpaper Engine。")
-        case "content_signin_required": WS("Sign in for downloads first.", "請先登入以下載。")
-        case "login_rejected", "invalid_credentials": WS("Steam sign-in was not accepted. Check credentials or Guard code.", "Steam 登入未獲接受，請檢查帳號密碼或 Guard 驗證碼。")
-        case "login_timeout", "connection_failed": WS("Steam could not be reached in time. Try again.", "無法及時連線至 Steam，請重試。")
-        case "download_timeout": WS("The download timed out.", "下載逾時。")
-        case "item_access_denied", "item_unavailable", "item_type_unsupported": WS("Steam could not authorize this Workshop item.", "Steam 無法授權此工作坊項目。")
-        case "manifest_missing", "manifest_failed", "manifest_access_denied", "manifest_mismatch": WS("Steam could not provide a valid item manifest.", "Steam 無法提供有效的項目清單。")
-        case "depot_access_denied", "app_access_denied", "ownership_check_failed": WS("Steam denied Wallpaper Engine content access for this account.", "Steam 拒絕此帳號存取 Wallpaper Engine 內容。")
-        case "wallpaper_project_missing": WS("The download is missing its project file.", "下載內容缺少專案檔案。")
-        case "import_failed": WS("The library did not install this Workshop item.", "媒體庫未能安裝此工作坊項目。")
-        default: WS("The download failed. Check Steam access and try again.", "下載失敗，請檢查 Steam 存取權限後重試。")
-        }
+        WorkshopContentDiagnostics.localizedError(reason)
     }
 }

@@ -92,13 +92,13 @@ impl InnerClient {
         match self
             .servers
             .iter()
-            .find(|&server| server.cell_id == self.connection.cell_id())
+            .find(|&server| server.https && allowed_cdn_host(&server.host) && server.cell_id == self.connection.cell_id())
         {
             Some(server) => Ok(server),
             None => self
                 .servers
                 .iter()
-                .find(|server| server.r#type == "SteamCache" || server.r#type == "CDN")
+                .find(|server| server.https && allowed_cdn_host(&server.host) && (server.r#type == "SteamCache" || server.r#type == "CDN"))
                 .ok_or(Error::Network("no available cdn servers".to_string())),
         }
     }

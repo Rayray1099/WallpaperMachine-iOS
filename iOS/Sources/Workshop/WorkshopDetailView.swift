@@ -1,9 +1,9 @@
 import SwiftUI
 import UIKit
 
-/// One Workshop item, its real Steam metadata, and the only install path available on iOS:
-/// open the item in Steam on a computer, then import the folder it downloaded. There is no
-/// Download button that pretends to fetch content this app is not authorized to fetch.
+/// Real Workshop metadata, experimental authenticated native downloads, and a
+/// desktop-download/import fallback. Community browser sign-in alone cannot
+/// authorize native content access.
 struct WorkshopDetailView: View {
     let item: WorkshopItem
     let store: WorkshopStore
@@ -283,13 +283,11 @@ struct WorkshopDetailView: View {
                         systemImage: "arrow.triangle.2.circlepath")
                         .font(.callout)
                         .foregroundStyle(.orange)
-                    Text(WS(
-                        "Steam on the iPad cannot download the new files. Download the item again on a computer, then import the new folder here.",
-                        "iPad 上的 Steam 無法下載新檔案。請在電腦重新下載此項目，然後在這裡匯入新資料夾。"))
+                    Text("workshop.fallback.update")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     disclosureSteps(
-                        title: WS("How to update it", "如何更新"),
+                        title: WMLocalized.string("workshop.fallback.updateSteps"),
                         steps: WorkshopDesktopHandoff.updateSteps(for: item),
                         isExpanded: $showUpdateSteps)
                     Button {
@@ -302,9 +300,7 @@ struct WorkshopDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                 } else {
-                    Text(WS(
-                        "This Workshop item is installed. An update can only arrive by importing a newer folder obtained through Steam on a computer.",
-                        "此工作坊項目已安裝。更新只能透過在電腦的 Steam 取得較新資料夾後匯入。"))
+                    Text("workshop.fallback.installed")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -313,12 +309,10 @@ struct WorkshopDetailView: View {
         case .desktopDownloadRequired:
             card {
                 Label(
-                    WS("Download needs the desktop Steam client", "下載需要桌面版 Steam 用戶端"),
+                    WMLocalized.string("workshop.fallback.title"),
                     systemImage: "desktopcomputer")
                     .font(.headline)
-                Text(WS(
-                    "Wallpaper Engine’s Workshop files are delivered by Steam’s client to an account that owns the app. Neither iOS nor this app can fetch them through a public URL, so this page does not fake a download.",
-                    "Wallpaper Engine 的工作坊檔案由 Steam 用戶端提供給擁有該應用程式的帳號。iOS 與本 App 都無法透過公開網址取得這些檔案，因此本頁不會假裝下載。"))
+                Text("workshop.fallback.message")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 HStack(spacing: 10) {
@@ -334,7 +328,7 @@ struct WorkshopDetailView: View {
                     openOnSteamButton()
                 }
                 disclosureSteps(
-                    title: WS("How to get it on this iPad", "如何取得並放到 iPad"),
+                    title: WMLocalized.string("workshop.fallback.importSteps"),
                     steps: WorkshopDesktopHandoff.steps(for: item),
                     isExpanded: $showSteps)
                 Button {

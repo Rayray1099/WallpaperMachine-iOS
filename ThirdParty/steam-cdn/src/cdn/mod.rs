@@ -31,9 +31,7 @@ impl CDNClient {
         let mut inner = InnerClient::new(connection);
         inner.servers =
             web_api::content_service::get_servers_for_steam_pipe(inner.cell_id()).await?;
-        inner
-            .servers
-            .sort_by(|a, b| a.weighted_load.cmp(&b.weighted_load));
+        inner.servers.sort_by(|a, b| a.weighted_load.total_cmp(&b.weighted_load));
         Ok(Self {
             inner: Arc::new(inner),
         })

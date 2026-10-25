@@ -190,8 +190,11 @@ async fn download(job: &Arc<Job>, req: &Request) -> Result<(), &'static str> {
     if item.result() != 1 || item.consumer_appid() != APP_ID { return Err("item_access_denied"); }
     if item.file_type() == 2 || item.tags.iter().any(|t| t.tag() == "Application") { return Err("item_type_unsupported"); }
     let manifest_id = item.hcontent_file(); if manifest_id == 0 { return Err("manifest_missing"); }
+    job.phase("resolving_depot");
     let depot = workshop_depot(&connection).await?;
+    job.phase("discovering_content");
     let cdn = steam_cdn::CDNClient::discover(connection).await.map_err(|_| "content_connection_failed")?;
+    job.phase("authorizing_manifest");
     let key = cdn.get_depot_decryption_key(APP_ID, depot).await.map_err(|_| "depot_access_denied")?.ok_or("depot_access_denied")?;
     let code = cdn.get_manifest_request_code(APP_ID, depot, manifest_id).await.map_err(|_| "manifest_access_denied")?;
     if code == 0 { return Err("manifest_access_denied"); }

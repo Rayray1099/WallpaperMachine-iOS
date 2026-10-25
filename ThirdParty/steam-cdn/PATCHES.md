@@ -25,5 +25,17 @@ Security modifications:
   contiguous offsets, each chunk's declared size, and final file size. Final
   file SHA-1 remains the integration caller's responsibility.
 
-The bounded limits and Steam-host matching have unit-level checks in the crate;
-there is intentionally no network test.
+- Decode Valve's CDN directory `weighted_load` as a finite, nonnegative `f64`,
+  accepting the actual fractional scores (for example 171.25) without truncation;
+  use total numeric ordering when ranking servers. The previous `u32` made the
+  entire directory fail to deserialize when any server had a fractional score.
+- Accept HTTPS capability only for explicit `mandatory` / `optional` values;
+  reject `unavailable`, `none` and unknown values. Server selection skips entries
+  without HTTPS or an allowed Steam CDN host; requests never fall back to HTTP.
+
+The bounded limits, Steam-host matching, fractional directory JSON, numeric
+ordering/invalid scores and explicit HTTPS capabilities have offline unit checks
+in the crate; there is intentionally no network test. `serde_json` is declared
+explicitly for the directory-schema regressions (already in the linked closure
+through reqwest); the parent workflow tests this path dependency with `-p`, so
+Cargo does not permit a dev-dependency on the non-workspace-member crate.

@@ -53,18 +53,6 @@ struct WorkshopContentSignInView: View {
 
     private func clear() { account = ""; password = ""; guardCode = "" }
     static func phaseLabel(_ raw: String) -> String {
-        switch raw {
-        case "guard": WS("Steam is awaiting Guard verification", "Steam 正等待 Guard 驗證")
-        case "connecting": WS("Connecting to Steam…", "正在連線至 Steam…")
-        case "authenticating": WS("Authenticating…", "正在驗證…")
-        case "checking_ownership": WS("Checking Wallpaper Engine ownership…", "正在檢查 Wallpaper Engine 擁有權…")
-        case "resolving_item": WS("Resolving Workshop item…", "正在解析工作坊項目…")
-        case "fetching_manifest": WS("Fetching download manifest…", "正在取得下載清單…")
-        case "downloading": WS("Downloading…", "正在下載…")
-        case "done": WS("Done", "完成")
-        case "cancelled": WS("Cancelled", "已取消")
-        case "error": WS("Download error", "下載錯誤")
-        default: WS("Waiting for Steam…", "等待 Steam…")
-        }
+        WMLocalized.string(WorkshopContentDiagnostics.phaseLocalizationKey(raw))
     }
 }
