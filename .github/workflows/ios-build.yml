@@ -1,0 +1,165 @@
+# Build the unsigned ARM64 iOS app on a GitHub-hosted macOS runner.
+#
+# This workflow only builds, packages and validates artifacts; it never signs,
+# tags, creates a release or writes repository contents. It is separate from
+# Build/Release (macOS) and is not called by them. The device app is built with
+# signing disabled; installing it on a physical iPadOS 27 device requires a
+# signing step outside CI.
+#
+# The SDK is detected from Xcode on the runner (xcrun --sdk iphoneos). The
+# deployment floor is iOS 18.0; no iOS 27 SDK is assumed.
+name: iOS Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios/main]
+    paths:
+      - "iOS/**"
+      - "Renderer/**"
+      - "ThirdParty/**"
+      - "scripts/ios/**"
+      - ".github/workflows/ios-build.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IOS_DEPLOYMENT_TARGET: "18.0"
+  IOS_ARTIFACTS: ${{ github.workspace }}/artifacts/ios/run-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  ios-arm64:
+    # macos-15 provides Xcode; device ARM64 is cross-compiled independent of host CPU.
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prepare the runner
+        run: bash scripts/ios/ci_setup.sh
+
+      - name: Restore renderer and compiler caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            Renderer/target
+            ~/.ccache
+          key: ios-renderer-${{ runner.os }}-${{ hashFiles('Renderer/Cargo.lock', 'Renderer/rust-toolchain.toml', 'ThirdParty/provenance.json', 'scripts/ios/build_renderer.sh') }}
+          restore-keys: |
+            ios-renderer-${{ runner.os }}-
+
+      - name: Record the source and artifact paths
+        id: meta
+        run: |
+          set -euo pipefail
+          mkdir -p "${IOS_ARTIFACTS}"
+          echo "sha_short=$(git rev-parse --short=8 HEAD)" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "artifacts=${IOS_ARTIFACTS}" >> "$GITHUB_OUTPUT"
+          echo "IOS_ARTIFACTS=${IOS_ARTIFACTS}" >> "$GITHUB_ENV"
+
+      - name: Build renderer and unsigned app
+        run: python3 scripts/ios/build.py --artifacts-dir "${IOS_ARTIFACTS}"
+
+      - name: Package the unsigned IPA
+        run: |
+          set -euo pipefail
+          python3 scripts/ios/package.py \
+            --app "$(cat "${IOS_ARTIFACTS}/app-path.txt")" \
+            --artifacts-dir "${IOS_ARTIFACTS}" \
+            --renderer-dir iOS/Generated/Renderer
+
+      - name: Validate the IPA structure and framework rules
+        # The built app is for iPhoneOS device ARM64, not the simulator.
+        run: |
+          set -euo pipefail
+          app="$(cat "${IOS_ARTIFACTS}/app-path.txt")"
+          ipa="$(find "${IOS_ARTIFACTS}" -maxdepth 1 -name '*.ipa' -print -quit)"
+          sdk="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sdk"]["path"])' "${IOS_ARTIFACTS}/toolchain.json")"
+          test -n "${ipa}"
+          python3 scripts/ios/validate.py \
+            --app "${app}" \
+            --ipa "${ipa}" \
+            --artifacts-dir "${IOS_ARTIFACTS}" \
+            --renderer-dir iOS/Generated/Renderer \
+            --sdk "${sdk}"
+
+      - name: Upload IPA, manifest, checksums and validation
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa-${{ steps.meta.outputs.sha_short }}-${{ github.run_id }}
+          path: |
+            ${{ steps.meta.outputs.artifacts }}/*.ipa
+            ${{ steps.meta.outputs.artifacts }}/manifest.json
+            ${{ steps.meta.outputs.artifacts }}/checksums.sha256
+            ${{ steps.meta.outputs.artifacts }}/validation.json
+            ${{ steps.meta.outputs.artifacts }}/toolchain.json
+            ${{ steps.meta.outputs.artifacts }}/build-summary.json
+            ${{ steps.meta.outputs.artifacts }}/app-path.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload native renderer outputs
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-native-${{ steps.meta.outputs.sha_short }}-${{ github.run_id }}
+          path: |
+            iOS/Generated/Renderer/include/
+            iOS/Generated/Renderer/lib/libWallpaperSceneRenderer.a
+            iOS/Generated/Renderer/manifest.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.meta.outputs.artifacts }}/*.log
+            ${{ steps.meta.outputs.artifacts }}/*.json
+            ${{ steps.meta.outputs.artifacts }}/checksums.sha256
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Native simulator tests (deferred)
+        if: success()
+        run: |
+          set -euo pipefail
+          echo "DEFERRED: no simulator renderer build/test dispatch is configured. Device renderer archive is not valid for iphonesimulator."
+          echo "### Native simulator tests: deferred (simulator-specific renderer build and test entry point not yet implemented)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report what was built
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "## iOS build (unsigned ARM64)"
+            echo ""
+            echo "- Commit: \`${{ steps.meta.outputs.commit }}\`"
+            echo "- Runner: macOS $(sw_vers -productVersion), host \`$(uname -m)\`; target iOS device arm64"
+            if [ -f "${IOS_ARTIFACTS}/validation.json" ]; then
+              echo "- Verdict: \`$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["verdict"])' "${IOS_ARTIFACTS}/validation.json")\`"
+            else
+              echo "- Verdict: no validation report (build did not reach validation)"
+            fi
+            if compgen -G "${IOS_ARTIFACTS}/*.ipa" > /dev/null; then
+              echo "- IPA: \`$(basename "$(find "${IOS_ARTIFACTS}" -maxdepth 1 -name '*.ipa' -print -quit)")\`"
+            fi
+            echo "- Artifacts: \`${IOS_ARTIFACTS}\`"
+            echo ""
+            echo "Physical iPadOS 27 installation and rendering are not tested by this workflow."
+          } >> "$GITHUB_STEP_SUMMARY"

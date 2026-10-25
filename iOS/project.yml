@@ -1,0 +1,122 @@
+# Native UIKit/SwiftUI host of the existing C++ engine and Rust wm-shader.
+# Generate with xcodegen generate --spec iOS/project.yml --project iOS
+name: WallpaperMachineIOS
+options:
+  bundleIdPrefix: com.rayray1099.wallpapermachine
+  deploymentTarget:
+    iOS: "18.0"
+  developmentLanguage: en
+  knownRegions: [en, zh-Hant, Base]
+  createIntermediateGroups: true
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    exactVersion: 0.9.19
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+    SUPPORTS_MACCATALYST: NO
+    SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: NO
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGN_IDENTITY: ""
+    DEVELOPMENT_TEAM: ""
+    GENERATE_INFOPLIST_FILE: NO
+    CLANG_ENABLE_MODULES: YES
+    CLANG_ENABLE_OBJC_ARC: YES
+    CLANG_CXX_LANGUAGE_STANDARD: "c++20"
+    CLANG_CXX_LIBRARY: "libc++"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    SWIFT_STRICT_CONCURRENCY: minimal
+    DEAD_CODE_STRIPPING: YES
+    DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+    VALIDATE_PRODUCT: NO
+
+targets:
+  WallpaperMachineIOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources
+        excludes: [Info.plist]
+    dependencies:
+      - package: ZIPFoundation
+      - sdk: UIKit.framework
+      - sdk: SwiftUI.framework
+      - sdk: Foundation.framework
+      - sdk: Combine.framework
+      - sdk: CoreFoundation.framework
+      - sdk: CoreGraphics.framework
+      - sdk: CoreImage.framework
+      - sdk: CoreMedia.framework
+      - sdk: CoreText.framework
+      - sdk: CoreVideo.framework
+      - sdk: AudioToolbox.framework
+      - sdk: AVFoundation.framework
+      - sdk: Accelerate.framework
+      - sdk: ImageIO.framework
+      - sdk: IOSurface.framework
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: QuartzCore.framework
+      - sdk: Security.framework
+      - sdk: UniformTypeIdentifiers.framework
+      - sdk: VideoToolbox.framework
+      - sdk: WebKit.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rayray1099.wallpapermachine.ios
+        PRODUCT_NAME: WallpaperMachineIOS
+        INFOPLIST_FILE: Resources/Info.plist
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_OBJC_BRIDGING_HEADER: "$(SRCROOT)/Sources/Renderer/SceneWallpaperBridge.h"
+        LIBRARY_SEARCH_PATHS: ["$(inherited)", "$(SRCROOT)/Generated/Renderer/lib"]
+        OTHER_LDFLAGS: ["$(inherited)", "-lWallpaperSceneRenderer", "-lc++", "-lz", "-liconv"]
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks"]
+  WallpaperMachineIOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/Unit
+      - path: Tests/Support
+    dependencies:
+      - target: WallpaperMachineIOS
+      - package: ZIPFoundation
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rayray1099.wallpapermachine.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/WallpaperMachineIOS.app/WallpaperMachineIOS"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+  WallpaperMachineIOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Tests/UI]
+    dependencies:
+      - target: WallpaperMachineIOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rayray1099.wallpapermachine.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: WallpaperMachineIOS
+schemes:
+  WallpaperMachineIOS:
+    build:
+      targets:
+        WallpaperMachineIOS: all
+        WallpaperMachineIOSTests: [test]
+        WallpaperMachineIOSUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [WallpaperMachineIOSTests, WallpaperMachineIOSUITests]
+    archive:
+      config: Release

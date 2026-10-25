@@ -14,6 +14,10 @@
 #include "Core/NoCopyMove.hpp"
 #include "Audio/SampleMath.h"
 
+#if defined(__APPLE__)
+#    include <TargetConditionals.h>
+#endif
+
 #define MA_NO_WASAPI
 #define MA_NO_DSOUND
 #define MA_NO_WINMM
@@ -50,8 +54,27 @@ class Device : NoCopy {
 public:
     // `context` lets tests run on miniaudio's null backend; nullptr keeps the
     // default system context (Core Audio on macOS). The context must outlive
-    // the device.
-    explicit Device(ma_context* context = nullptr): m_context(context) {}
+    // the device. On iOS the device owns a context configured to leave the
+    // AVAudioSession alone: the host (SceneWallpaperView) sets the category and
+    // activation, because the microphone path shares that session.
+    explicit Device(ma_context* context = nullptr): m_context(context) {
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+        if (m_context == nullptr) {
+            ma_context_config config = ma_context_config_init();
+            config.coreaudio.sessionCategory         = ma_ios_session_category_none;
+            config.coreaudio.noAudioSessionActivate  = MA_TRUE;
+            config.coreaudio.noAudioSessionDeactivate = MA_TRUE;
+            if (ma_context_init(nullptr, 0, &config, &m_owned_context) == MA_SUCCESS) {
+                m_context      = &m_owned_context;
+                m_owns_context = true;
+            } else {
+                // Keep going on miniaudio's default context; the host session is
+                // still the one that decides the category and activation.
+                LOG_ERROR("can't init the iOS audio context");
+            }
+        }
+#endif
+    }
     ~Device() { UnInit(); }
 
 public:
@@ -136,6 +159,11 @@ private:
         }
         UnmountAllLocked();
         ma_device_uninit(&m_device); // always do it
+        if (m_owns_context) {
+            ma_context_uninit(&m_owned_context);
+            m_context      = nullptr;
+            m_owns_context = false;
+        }
     }
     void UnmountAllLocked() {
         std::unique_lock<std::mutex> lock { m_mutex };
@@ -221,6 +249,8 @@ private:
 
 private:
     ma_context*       m_context { nullptr };
+    ma_context        m_owned_context {}; // iOS: the host-session context
+    bool              m_owns_context { false };
     ma_device         m_device {}; // must init c struct
     std::mutex        m_mutex;     // for operating channel vector
     std::mutex        m_control_mutex; // serializes control-thread state changes

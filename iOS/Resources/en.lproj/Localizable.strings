@@ -1,0 +1,163 @@
+/* WallpaperMachine iOS — English (source language). */
+
+"app.title" = "WallpaperMachine";
+
+"common.ok" = "OK";
+"common.cancel" = "Cancel";
+"common.close" = "Close";
+"common.delete" = "Delete";
+"common.on" = "On";
+"common.off" = "Off";
+
+"alert.error.title" = "Something Went Wrong";
+
+"library.section.library" = "Library";
+"library.all" = "All Wallpapers";
+"library.favorites" = "Favorites";
+"library.import" = "Import";
+"library.searchPrompt" = "Search wallpapers";
+"library.browse" = "Browse Library";
+"library.empty.title" = "No Wallpapers Yet";
+"library.empty.message" = "Import a Wallpaper Engine project folder, a video, an image, or a web wallpaper to get started.";
+"library.empty.import" = "Import Wallpaper…";
+"library.empty.scope.title" = "Nothing Here Yet";
+"library.empty.scope.message" = "This view has no wallpapers yet.";
+"library.empty.favorites.message" = "Favorite a wallpaper and it will appear here.";
+"library.empty.playlist.message" = "Add wallpapers to your playlist to build a rotation.";
+"library.empty.collection.message" = "Add wallpapers to this collection from the preview inspector.";
+"library.noResults.title" = "No Results";
+"library.noResults.message" = "No wallpapers match “%@”.";
+"library.itemCount" = "%lld wallpapers";
+"library.remove" = "Remove from Library…";
+"library.importing" = "Importing…";
+
+"collections.title" = "Collections";
+"collections.empty" = "No collections yet";
+"collection.new" = "New Collection";
+"collection.new.title" = "New Collection";
+"collection.new.create" = "Create Collection";
+"collection.new.footnote" = "Collections group wallpapers without moving their files.";
+"collection.namePlaceholder" = "Collection name";
+"collection.name.duplicate" = "A collection with this name already exists.";
+"collection.delete" = "Delete Collection";
+"collection.delete.confirm.title" = "Delete This Collection?";
+"collection.delete.confirm.message" = "“%@” will be removed from every wallpaper. The wallpapers stay in your library.";
+"collection.none" = "No collections yet.";
+
+"playlist.title" = "Playlist";
+"playlist.open" = "Playlist";
+"playlist.add" = "Add to Playlist";
+"playlist.remove" = "Remove from Playlist";
+"playlist.play" = "Play Playlist";
+"playlist.pause" = "Pause Playlist";
+"playlist.editor.title" = "Edit Playlist";
+"playlist.empty.message" = "Add wallpapers to the playlist from a wallpaper's preview or the grid's context menu.";
+"playlist.reorderHint" = "Drag to reorder. Swipe a wallpaper to remove it from the playlist.";
+
+"preview.noSelection.title" = "Select a Wallpaper";
+"preview.noSelection.message" = "Choose a wallpaper from the library to preview it here.";
+"preview.unavailable" = "Preview Unavailable";
+"preview.unavailable.message" = "The preview could not be loaded.";
+"preview.fullscreen" = "Fullscreen";
+"preview.export" = "Export…";
+"preview.favorite" = "Add to Favorites";
+"preview.unfavorite" = "Remove from Favorites";
+"preview.next" = "Next Wallpaper";
+"preview.previous" = "Previous Wallpaper";
+
+"inspector.details" = "Details";
+"inspector.kind" = "Type";
+"inspector.added" = "Added";
+"inspector.workshopID" = "Workshop ID";
+"inspector.properties" = "Properties";
+"inspector.noProperties" = "This wallpaper exposes no adjustable properties.";
+"inspector.playback" = "Playback";
+"inspector.playback.footnote" = "These settings are shared by every wallpaper that uses them.";
+"inspector.playback.webNote" = "Web wallpapers use their own project properties. Playback settings do not apply to them.";
+"inspector.collections" = "Collections";
+"inspector.playlist" = "Playlist";
+"inspector.iosOnlyNote" = "Playback stays inside WallpaperMachine. iPadOS does not allow third-party wallpapers on the Home Screen or Lock Screen.";
+"inspector.remove.confirm.title" = "Remove This Wallpaper?";
+"inspector.remove.confirm.message" = "“%@” and its imported files will be deleted from this iPad.";
+
+"kind.scene" = "Scene";
+"kind.video" = "Video";
+"kind.web" = "Web";
+"kind.image" = "Image";
+
+"property.value" = "Value";
+"property.enabled" = "Enabled";
+"property.color" = "Color";
+"property.arrayCount" = "%lld values";
+"property.objectCount" = "%lld fields";
+"property.unsupported.message" = "The “%@” property type is not editable in this version. Its saved value is shown read-only.";
+
+"settings.title" = "Settings";
+"settings.playback" = "Playback";
+"settings.playback.footnote" = "These settings apply to scene and video wallpapers.";
+"settings.volume" = "Volume";
+"settings.mute" = "Mute";
+"settings.fps" = "Frame Rate";
+"settings.fpsValue" = "%lld fps";
+"settings.renderScale" = "Render Scale";
+"settings.scaling" = "Scaling";
+"settings.scaling.fit" = "Fit";
+"settings.scaling.fill" = "Fill";
+"settings.scaling.stretch" = "Stretch";
+
+"settings.playlist" = "Playlist";
+"settings.playlist.interval" = "Seconds Between Wallpapers";
+"settings.playlist.footnote" = "Used while a playlist is playing.";
+"settings.seconds" = "%lld s";
+
+"settings.microphone.section" = "Microphone";
+"settings.microphone" = "Microphone Analysis";
+"settings.microphone.status" = "Permission";
+"settings.microphone.allowed" = "Allowed";
+"settings.microphone.denied" = "Denied";
+"settings.microphone.undetermined" = "Not Requested";
+"settings.microphone.openSettings" = "Open Settings";
+"settings.microphone.footnote" = "When allowed, audio-responsive wallpapers receive real microphone samples. iPadOS asks for permission the first time.";
+"settings.microphone.denied.message" = "Microphone access is denied. Allow it in Settings to use audio-responsive wallpapers.";
+
+"settings.library" = "Library";
+"settings.library.items" = "Wallpapers";
+"settings.library.export" = "Export Backup…";
+"settings.library.restore" = "Restore Backup…";
+"settings.library.footnote" = "Use Export Backup to save a copy, and Restore Backup to read one back.";
+"settings.library.restore.confirm.title" = "Restore This Backup?";
+"settings.library.restore.confirm.action" = "Restore";
+"settings.library.restore.confirm.message" = "The selected backup will be applied to your library.";
+
+"settings.keyboard" = "Keyboard Shortcuts";
+"settings.keyboard.import" = "Import";
+"settings.keyboard.search" = "Search";
+"settings.keyboard.favorite" = "Toggle Favorite";
+"settings.keyboard.fullscreen" = "Fullscreen";
+"settings.keyboard.playlist" = "Play or Pause Playlist";
+"settings.keyboard.next" = "Next Wallpaper";
+"settings.keyboard.previous" = "Previous Wallpaper";
+
+"settings.about" = "About";
+"settings.about.version" = "Version";
+"settings.about.build" = "Build";
+"settings.about.language" = "Language";
+"settings.about.language.system" = "System";
+"settings.about.language.footnote" = "English and Traditional Chinese are included. The app follows the system language.";
+"settings.about.note" = "iPadOS does not let third-party apps set the Home Screen or Lock Screen wallpaper. Playback stays in the app and in exports.";
+
+"command.menu.wallpaper" = "Wallpaper";
+"command.import" = "Import Wallpaper…";
+"command.search" = "Search Library";
+"command.favorite" = "Toggle Favorite";
+"command.fullscreen" = "Enter Fullscreen";
+"command.play" = "Play Playlist";
+"command.pause" = "Pause Playlist";
+"command.next" = "Next Wallpaper";
+"command.previous" = "Previous Wallpaper";
+
+"context.favorite" = "Add to Favorites";
+"context.unfavorite" = "Remove from Favorites";
+
+"workshop.title" = "Workshop";
+"export.title" = "Export";

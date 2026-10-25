@@ -1,0 +1,3 @@
+/* WallpaperMachine iOS — English Info.plist strings. */
+
+"NSMicrophoneUsageDescription" = "WallpaperMachine uses the microphone only when you turn on audio-reactive wallpapers.";

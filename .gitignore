@@ -68,3 +68,14 @@ CLAUDE.local.md
 
 # Rust workspace output
 Renderer/target/
+
+# iOS outputs, local device evidence, and signing material
+.local/
+iOS/Generated/
+iOS/*.xcodeproj/
+iOS/build/
+*.ipa
+*.p12
+*.mobileprovision
+*.cer
+*.p8

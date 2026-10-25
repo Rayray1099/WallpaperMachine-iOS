@@ -12,6 +12,7 @@
 #include <unordered_map>
 
 #ifdef __APPLE__
+#    include <TargetConditionals.h>
 #    include <CoreFoundation/CoreFoundation.h>
 #    include <CoreText/CoreText.h>
 #endif
@@ -45,6 +46,24 @@ struct SceneFont {
     SystemFontFit    fit;
 };
 
+// Wallpaper Engine names eight Windows faces. A face the platform actually has is
+// used as itself; the rest are stood in for by the closest installed face, fitted
+// to the real font's advances and line metrics. macOS and iOS ship different
+// families, so each platform has its own stand-in table: Arial, Verdana and
+// Charter are on both; Helvetica Neue and Menlo are the iOS counterparts of the
+// macOS PT Sans and Andale Mono stand-ins.
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+constexpr SceneFont kSceneFonts[] = {
+    { "systemfont_arial", "Arial", {} },
+    { "systemfont_calibri", "Helvetica Neue", { 0.912f, FontLineMetrics { 2048, 1536, 512, 452 } } },
+    { "systemfont_cambria", "Charter", { 0.996f, FontLineMetrics { 2048, 1946, 455, 0 } } },
+    { "systemfont_comicsans", "Chalkboard SE", {} },
+    { "systemfont_consolas", "Menlo", { 0.916f, FontLineMetrics { 2048, 1521, 526, 351 } } },
+    { "systemfont_sansserif", "Helvetica", {} },
+    { "systemfont_segoe", "Helvetica Neue", { 0.966f, FontLineMetrics { 2048, 2210, 514, 0 } } },
+    { "systemfont_verdana", "Verdana", {} },
+};
+#else
 constexpr SceneFont kSceneFonts[] = {
     { "systemfont_arial", "Arial", {} },
     { "systemfont_calibri", "PT Sans", { 0.930f, FontLineMetrics { 2048, 1536, 512, 452 } } },
@@ -55,6 +74,7 @@ constexpr SceneFont kSceneFonts[] = {
     { "systemfont_segoe", "PT Sans", { 0.987f, FontLineMetrics { 2048, 2210, 514, 0 } } },
     { "systemfont_verdana", "Verdana", {} },
 };
+#endif
 
 const SceneFont* FindSceneFont(std::string_view key) {
     for (const auto& font : kSceneFonts) {

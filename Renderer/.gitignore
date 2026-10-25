@@ -2,3 +2,8 @@
 # the engine's tests may be pointed at.
 /target/
 /unpack/
+
+# scripts/ios/build_renderer.sh downloads and builds the pinned iOS dependencies
+# and the arm64 engine here; neither is a source input.
+/Engine/.ios-deps/
+/Engine/build-ios/

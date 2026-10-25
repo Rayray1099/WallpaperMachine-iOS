@@ -56,6 +56,16 @@ live under `testing/`.
 | [testing/wallpaper-fixes.md](testing/wallpaper-fixes.md) | Triaging and fixing a wallpaper that looks wrong: download, Wallpaper Engine frames, probe scenes, test-first fix, before/after comparison, cleanup |
 | [testing/wallpaper-engine-reference.md](testing/wallpaper-engine-reference.md) | Comparing a wallpaper with Wallpaper Engine's own frames from a Parallels Windows VM (`scripts/we_reference.py`): capture, render, compare, noise floor |
 
+## iOS / iPadOS port
+
+| Document | Purpose |
+|---|---|
+| [ios/ARCHITECTURE.md](ios/ARCHITECTURE.md) | Native iOS host, shared real renderer, integration contracts and ownership |
+| [ios/INTEGRATION.md](ios/INTEGRATION.md) | Cross-module implementation decisions and current renderer build contract |
+| [ios/STATUS.md](ios/STATUS.md) | Feature-parity checklist with source/build/on-device verification kept separate |
+| [ios/EXPORT.md](ios/EXPORT.md) | Real-frame export, iPad geometry, experimental tendies and AirCard safety boundary |
+| [ios/QA.md](ios/QA.md) | Executable iCTRL/offline regression harness and physical-device evidence policy |
+
 ## Archive
 
 Historical records kept for provenance, never for current guidance. `rg` skips

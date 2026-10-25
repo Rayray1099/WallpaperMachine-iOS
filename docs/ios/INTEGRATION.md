@@ -1,0 +1,46 @@
+# Integration decisions from Lead
+
+These are shared implementation contracts, not verification claims. Source, compilation, packaging and physical-device verification are tracked separately in [STATUS.md](STATUS.md).
+
+## Shared model and UI
+
+- Lead implements `LibraryStore()` no-argument initializer plus `init(rootURL:)` for isolated tests.
+- Published properties are module-settable as architecture says.
+- `JSONValue` has string/number/bool/array/object/null cases with manual JSON-shaped Codable (not Swift tagged synthesized representation).
+- `update(_ item:)` is nonthrowing, errors through `errorMessage`; `remove(_ item:) throws`.
+- `importURL(_:) async` is nonthrowing, errors through `errorMessage`. It accepts a project folder, video, image, HTML, or `.wmbackup`. Numeric imported folder name initializes workshopID. Importing an existing workshopID replaces its managed asset folder atomically while preserving favorite/collection/property selections.
+- `url(for:)` returns the managed project **folder**, not the entry. UI appends `entryFile` before preview/export.
+- Backups use a versioned directory tree archived as ZIP with `.wmbackup` extension (ZIPFoundation package). No credentials in backups.
+- `save()` persists direct UI settings/playlists/collections mutations atomically.
+
+## Frame providers
+
+Export owns its `@MainActor WallpaperFrameProvider` protocol and type erasure:
+`frameSize: CGSize`, `prepareForExport() async throws`, `frame(at: CMTime) async throws -> CVPixelBuffer?`, `finishExport() async`.
+Media owns its `@MainActor MediaFrameProviding` CGImage capture protocol. These can coexist: an adapter in app integration converts CGImage to CVPixelBuffer (or export agent may provide such an adapter). Never silently export a static preview as a scene/web animation. WallpaperExportView's three-argument initializer remains available; optional injected provider defaults to nil, which must be an explicit unsupported state for any unsupported source.
+
+## Confirmed renderer outputs (latest, supersedes build proposal below)
+
+Renderer Agent supplies `iOS/Generated/Renderer/lib/libWallpaperSceneRenderer.a`, generated includes `include/Platform/Apple/SceneWallpaperBindings.h`, `include/Core/RendererCounters.h`, `include/WallpaperSceneRenderer.h`, `link-flags.txt` and `manifest.json`.
+
+Build Agent MUST adapt its project/script to that actual contract:
+- call `bash scripts/ios/build_renderer.sh --sdk iphoneos`
+- bridging header `$(SRCROOT)/Sources/Renderer/SceneWallpaperBridge.h` (SRCROOT is iOS)
+- static archive `$(SRCROOT)/Generated/Renderer/lib/libWallpaperSceneRenderer.a`
+- use renderer link-flags.txt system frameworks; no force_load, no Homebrew dependency dylibs
+- no generated UniFFI WallpaperBridge Swift/FFI/modulemap requirement (we are not compiling macOS Rust Core/Bridge)
+- all sources compile as one app module, include QA test target and exclude `Tests/UI` from unit target; separate UI testing target if running those tests.
+
+Media and Renderer both proposed AVAudioEngine microphone feed; avoid simultaneous recording, use one shared source during integration. Export protocol+type erasure and Media capture protocol may coexist with conversion adapter; 3-arg export initializer must stay valid.
+
+## Build/renderer agreement
+
+The device build uses SDK `iphoneos`, deployment floor 18.0, architecture `arm64` and Rust target `aarch64-apple-ios`. `iOS/Generated/Renderer` is the single output root; older `build/ios/renderer` and UniFFI proposals are obsolete.
+
+We integrate Rust `wm-shader` + the real C++ engine C ABI, **not** unmodified macOS-only Rust Core/Bridge with AppKit/ServiceManagement. No generated UniFFI WallpaperBridge files are required.
+
+System frameworks only; no Homebrew macOS binaries in the IPA. All iOS/Sources files share one Swift 5 module. Resources include English and Traditional Chinese, with microphone purpose text. Unit and UI tests have separate XcodeGen targets; simulator testing requires its own simulator renderer objects and is not established by a device archive build. Lead alone commits/pushes/triggers.
+
+## Workshop
+
+Actual public Steam item details observed by Workshop Agent return no public file_url for Wallpaper Engine SteamPipe/UGC items. Never guess HTTP downloads or bypass ownership. Implement lawful browse/search/previews/cache/update comparison and existing-folder import; document missing CM/depot-auth implementation rather than claim full downloads. Workshop test scope may be `iOS/Tests/Workshop/` only after QA handoff; otherwise give Lead a test specification. Do not collect account cookies or start live Steam login for an unimplemented download route.

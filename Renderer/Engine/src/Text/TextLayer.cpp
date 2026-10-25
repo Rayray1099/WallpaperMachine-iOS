@@ -22,6 +22,10 @@
 #include FT_FREETYPE_H
 #include FT_ADVANCES_H
 
+#ifdef __APPLE__
+#    include <TargetConditionals.h>
+#endif
+
 namespace wallpaper
 {
 
@@ -393,6 +397,19 @@ struct ChainFace {
     // The face is not asked for CJK punctuation and fullwidth forms (`IsCjkPunctuation`).
     bool             not_for_cjk_punctuation { false };
 };
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+// iOS has no Apple Symbols or Arial Unicode MS. PingFang SC, Hiragino Sans and
+// Apple SD Gothic Neo are its installed faces for those scripts, so they take
+// the chain's CJK and symbol slots instead.
+constexpr ChainFace kFallbackChain[] = {
+    { "systemfont_arial", true },     // arial.ttf, else Helvetica
+    { "systemfont_segoe", true },     // Helvetica Neue
+    { "Helvetica Neue", false, true },
+    { "PingFang SC", false },         // msyh.ttc
+    { "Hiragino Sans", false },       // Japanese kanji and kana
+    { "Apple SD Gothic Neo", false }, // Malgun.ttf
+};
+#else
 constexpr ChainFace kFallbackChain[] = {
     { "systemfont_arial", true },   // arial.ttf
     { "systemfont_segoe", true },   // segoeui.ttf
@@ -401,6 +418,7 @@ constexpr ChainFace kFallbackChain[] = {
     { "Apple SD Gothic Neo", false }, // Malgun.ttf
     { "Arial Unicode MS", false },  // arialuni.ttf
 };
+#endif
 
 // CJK Symbols and Punctuation, and Halfwidth and Fullwidth Forms.
 constexpr bool IsCjkPunctuation(uint32_t codepoint) {

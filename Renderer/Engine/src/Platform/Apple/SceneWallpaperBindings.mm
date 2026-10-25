@@ -12,6 +12,7 @@
 #include "RenderCommon/StaticSubgraphCache.hpp"
 #include "Video/VideoFramePacing.hpp"
 
+#import <Foundation/Foundation.h>
 #import <QuartzCore/CAMetalLayer.h>
 
 #include <algorithm>

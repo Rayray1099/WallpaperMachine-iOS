@@ -1,4 +1,8 @@
-find_package(OpenGL REQUIRED)
+# The desktop build has always asked for OpenGL even though the native renderer
+# is Metal; iOS has no OpenGL framework, so the request is desktop-only.
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  find_package(OpenGL REQUIRED)
+endif()
 find_package(Threads REQUIRED)
 find_package(Freetype REQUIRED)
 pkg_check_modules(LZ4 REQUIRED IMPORTED_TARGET liblz4)
@@ -11,12 +15,22 @@ endif()
 
 if(APPLE)
   # Each entry is <VARIABLE stem>:<framework>; the cache variable is <stem>_FRAMEWORK.
-  foreach(entry
-          ACCELERATE:Accelerate AUDIO_TOOLBOX:AudioToolbox AUDIO_UNIT:AudioUnit
-          CORE_AUDIO:CoreAudio CORE_TEXT:CoreText CORE_GRAPHICS:CoreGraphics
-          CORE_MEDIA:CoreMedia CORE_VIDEO:CoreVideo FOUNDATION:Foundation
-          IOSURFACE:IOSurface METAL:Metal QUARTZ_CORE:QuartzCore
-          VIDEOTOOLBOX:VideoToolbox)
+  # AudioUnit.framework and CoreAudio.framework are macOS frameworks: on iOS the
+  # Audio Unit API and the CoreAudio types ship inside AudioToolbox.framework, so
+  # those two names are omitted there rather than looked up and failed.
+  set(wescene_apple_frameworks
+      ACCELERATE:Accelerate AUDIO_TOOLBOX:AudioToolbox CORE_TEXT:CoreText
+      CORE_GRAPHICS:CoreGraphics CORE_MEDIA:CoreMedia CORE_VIDEO:CoreVideo
+      FOUNDATION:Foundation IOSURFACE:IOSurface METAL:Metal QUARTZ_CORE:QuartzCore
+      VIDEOTOOLBOX:VideoToolbox)
+  if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    list(APPEND wescene_apple_frameworks AUDIO_UNIT:AudioUnit CORE_AUDIO:CoreAudio)
+  else()
+    # miniaudio's iOS backend drives AVAudioSession and builds its output unit
+    # from AudioToolbox; AVFoundation is where the session class lives.
+    list(APPEND wescene_apple_frameworks AVFOUNDATION:AVFoundation)
+  endif()
+  foreach(entry IN LISTS wescene_apple_frameworks)
     string(REPLACE ":" ";" entry_parts "${entry}")
     list(GET entry_parts 0 framework_stem)
     list(GET entry_parts 1 framework_name)
@@ -150,6 +164,8 @@ if(APPLE)
       ${CORE_TEXT_FRAMEWORK}
       ${CORE_VIDEO_FRAMEWORK}
       ${ACCELERATE_FRAMEWORK}
+      ${AVFOUNDATION_FRAMEWORK}
+      ${CORE_GRAPHICS_FRAMEWORK}
       ${FOUNDATION_FRAMEWORK}
       ${IOSURFACE_FRAMEWORK}
       ${METAL_FRAMEWORK}

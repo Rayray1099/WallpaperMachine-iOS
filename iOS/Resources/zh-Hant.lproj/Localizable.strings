@@ -1,0 +1,163 @@
+/* WallpaperMachine iOS — Traditional Chinese (zh-Hant). */
+
+"app.title" = "WallpaperMachine";
+
+"common.ok" = "確定";
+"common.cancel" = "取消";
+"common.close" = "關閉";
+"common.delete" = "刪除";
+"common.on" = "開";
+"common.off" = "關";
+
+"alert.error.title" = "發生錯誤";
+
+"library.section.library" = "圖庫";
+"library.all" = "所有桌布";
+"library.favorites" = "我的最愛";
+"library.import" = "匯入";
+"library.searchPrompt" = "搜尋桌布";
+"library.browse" = "瀏覽圖庫";
+"library.empty.title" = "尚無桌布";
+"library.empty.message" = "匯入 Wallpaper Engine 專案資料夾、影片、圖片或網頁桌布即可開始。";
+"library.empty.import" = "匯入桌布…";
+"library.empty.scope.title" = "這裡還沒有內容";
+"library.empty.scope.message" = "這個檢視尚無桌布。";
+"library.empty.favorites.message" = "將桌布加入我的最愛後，就會顯示在這裡。";
+"library.empty.playlist.message" = "將桌布加入播放清單即可建立輪播。";
+"library.empty.collection.message" = "在預覽檢查器中將桌布加入這個收藏。";
+"library.noResults.title" = "沒有結果";
+"library.noResults.message" = "沒有符合「%@」的桌布。";
+"library.itemCount" = "%lld 張桌布";
+"library.remove" = "從圖庫移除…";
+"library.importing" = "正在匯入…";
+
+"collections.title" = "收藏";
+"collections.empty" = "尚無收藏";
+"collection.new" = "新增收藏";
+"collection.new.title" = "新增收藏";
+"collection.new.create" = "建立收藏";
+"collection.new.footnote" = "收藏可用來分類桌布，不會移動檔案。";
+"collection.namePlaceholder" = "收藏名稱";
+"collection.name.duplicate" = "已有同名收藏。";
+"collection.delete" = "刪除收藏";
+"collection.delete.confirm.title" = "要刪除這個收藏嗎？";
+"collection.delete.confirm.message" = "會從所有桌布移除「%@」。桌布仍會保留在圖庫中。";
+"collection.none" = "尚無收藏。";
+
+"playlist.title" = "播放清單";
+"playlist.open" = "播放清單";
+"playlist.add" = "加入播放清單";
+"playlist.remove" = "從播放清單移除";
+"playlist.play" = "播放播放清單";
+"playlist.pause" = "暫停播放清單";
+"playlist.editor.title" = "編輯播放清單";
+"playlist.empty.message" = "從桌布預覽或格狀選單將桌布加入播放清單。";
+"playlist.reorderHint" = "拖曳可重新排序。滑動可從播放清單移除桌布。";
+
+"preview.noSelection.title" = "選擇桌布";
+"preview.noSelection.message" = "從圖庫選擇桌布，即可在這裡預覽。";
+"preview.unavailable" = "無法預覽";
+"preview.unavailable.message" = "無法載入預覽。";
+"preview.fullscreen" = "全螢幕";
+"preview.export" = "匯出…";
+"preview.favorite" = "加入我的最愛";
+"preview.unfavorite" = "移出我的最愛";
+"preview.next" = "下一張桌布";
+"preview.previous" = "上一張桌布";
+
+"inspector.details" = "詳細資料";
+"inspector.kind" = "類型";
+"inspector.added" = "加入日期";
+"inspector.workshopID" = "工作坊 ID";
+"inspector.properties" = "屬性";
+"inspector.noProperties" = "這張桌布沒有可調整的屬性。";
+"inspector.playback" = "播放";
+"inspector.playback.footnote" = "這些設定由使用它們的桌布共用。";
+"inspector.playback.webNote" = "網頁桌布使用專案自己的屬性，不適用播放設定。";
+"inspector.collections" = "收藏";
+"inspector.playlist" = "播放清單";
+"inspector.iosOnlyNote" = "播放只會在 WallpaperMachine 內進行。iPadOS 不允許第三方 App 設定主畫面或鎖定畫面桌布。";
+"inspector.remove.confirm.title" = "要移除此桌布嗎？";
+"inspector.remove.confirm.message" = "會從這台 iPad 刪除「%@」及其匯入的檔案。";
+
+"kind.scene" = "場景";
+"kind.video" = "影片";
+"kind.web" = "網頁";
+"kind.image" = "圖片";
+
+"property.value" = "值";
+"property.enabled" = "啟用";
+"property.color" = "顏色";
+"property.arrayCount" = "%lld 個值";
+"property.objectCount" = "%lld 個欄位";
+"property.unsupported.message" = "此版本無法編輯「%@」類型的屬性，只會顯示已儲存的值。";
+
+"settings.title" = "設定";
+"settings.playback" = "播放";
+"settings.playback.footnote" = "這些設定會套用到場景與影片桌布。";
+"settings.volume" = "音量";
+"settings.mute" = "靜音";
+"settings.fps" = "影格率";
+"settings.fpsValue" = "%lld fps";
+"settings.renderScale" = "算繪比例";
+"settings.scaling" = "縮放方式";
+"settings.scaling.fit" = "符合畫面";
+"settings.scaling.fill" = "填滿畫面";
+"settings.scaling.stretch" = "拉伸";
+
+"settings.playlist" = "播放清單";
+"settings.playlist.interval" = "桌布切換秒數";
+"settings.playlist.footnote" = "播放清單播放時使用。";
+"settings.seconds" = "%lld 秒";
+
+"settings.microphone.section" = "麥克風";
+"settings.microphone" = "麥克風分析";
+"settings.microphone.status" = "權限";
+"settings.microphone.allowed" = "已允許";
+"settings.microphone.denied" = "已拒絕";
+"settings.microphone.undetermined" = "尚未要求";
+"settings.microphone.openSettings" = "開啟設定";
+"settings.microphone.footnote" = "允許後，支援音訊反應的桌布會收到真實的麥克風取樣。iPadOS 會在第一次使用時詢問權限。";
+"settings.microphone.denied.message" = "麥克風存取已遭拒絕。請在設定中允許，才能使用音訊反應桌布。";
+
+"settings.library" = "圖庫";
+"settings.library.items" = "桌布";
+"settings.library.export" = "匯出備份…";
+"settings.library.restore" = "還原備份…";
+"settings.library.footnote" = "使用「匯出備份」保存副本，並用「還原備份」讀回。";
+"settings.library.restore.confirm.title" = "要還原這個備份嗎？";
+"settings.library.restore.confirm.action" = "還原";
+"settings.library.restore.confirm.message" = "所選備份會套用到你的圖庫。";
+
+"settings.keyboard" = "鍵盤快速鍵";
+"settings.keyboard.import" = "匯入";
+"settings.keyboard.search" = "搜尋";
+"settings.keyboard.favorite" = "切換我的最愛";
+"settings.keyboard.fullscreen" = "全螢幕";
+"settings.keyboard.playlist" = "播放或暫停播放清單";
+"settings.keyboard.next" = "下一張桌布";
+"settings.keyboard.previous" = "上一張桌布";
+
+"settings.about" = "關於";
+"settings.about.version" = "版本";
+"settings.about.build" = "建置版本";
+"settings.about.language" = "語言";
+"settings.about.language.system" = "系統";
+"settings.about.language.footnote" = "內含英文與繁體中文。App 會跟隨系統語言。";
+"settings.about.note" = "iPadOS 不允許第三方 App 設定主畫面或鎖定畫面桌布。播放會在 App 內與匯出內容中進行。";
+
+"command.menu.wallpaper" = "桌布";
+"command.import" = "匯入桌布…";
+"command.search" = "搜尋圖庫";
+"command.favorite" = "切換我的最愛";
+"command.fullscreen" = "進入全螢幕";
+"command.play" = "播放播放清單";
+"command.pause" = "暫停播放清單";
+"command.next" = "下一張桌布";
+"command.previous" = "上一張桌布";
+
+"context.favorite" = "加入我的最愛";
+"context.unfavorite" = "移出我的最愛";
+
+"workshop.title" = "工作坊";
+"export.title" = "匯出";
