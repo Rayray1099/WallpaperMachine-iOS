@@ -1331,7 +1331,8 @@ repeat the picture completes without presenting, so a healthy, still scene stand
 at the same `frames_presented` and a growing `last_present_age`. A reading built on
 presents would call it stalled. Host-initiated stops, such as a surface being rebuilt
 for a display change, are not failures and never set the stop. It clears when a
-wallpaper is applied, a surface is installed or the graph rebuilds.
+wallpaper is successfully committed or its graph/surface is rebuilt; a pre-admission
+load failure is the exception described below and is not cleared by a resize.
 
 The reading is shown in two places, both as the mode `stopped_after_failure`:
 **Settings → Performance → Live diagnostics → Updating now** says "stopped after a
@@ -1340,6 +1341,22 @@ rendering failure", and the `running scene:` lines of the
 user chose, or a display the app suspended, outranks it, and it shows again the moment
 that is lifted; a reading the renderer could not take stays `unknown` and is never
 reported as stopped or as running.
+
+A failure before parsing/scene admission is distinct from a failed parsed scene.
+Source resolution, required filesystem mounts, scene documents and authored/saved
+properties now publish a fixed `Prepare` failure reason through the existing
+backend-failure reader. The render clock stops without an author-preview substitution,
+first-frame callback or presented-frame credit. If this was a replacement, a resize
+or resume cannot rebuild the outgoing graph and conceal the failed load. A successful
+new scene commit clears this load-failure latch. Repairing files alone does not reload
+an identical configuration: use an explicit refresh or a new host. The iOS host
+prepares the mandatory empty shared-assets folder; this supplies no licensed resources.
+
+An empty scene is not a positive Metal control: current admission refuses it when
+no material attempted Metal translation. The generated packed-quad startup fixture
+instead includes its own model, shaders and texture; its detached native GPU readback
+is separate from physical iPad presentation. The first-frame callback can also settle
+some held parsed-scene failures and is never evidence that a native frame was presented.
 
 #### Recovery
 

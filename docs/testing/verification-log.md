@@ -25,6 +25,17 @@ and moves whatever falls past ten verbatim into a monthly file under
 [archive/](archive/); promote anything durable before it goes. Editing an
 entry's recorded result is not allowed.
 
+## 2026-10-25 — iOS scene startup prerequisites and native load diagnostics
+
+- Source 30a48125: prepare mandatory empty SharedAssets before native allocation; optional cache; preserve startup errors. Native early failures publish sanitized Prepare reasons without frame credit, and failed replacements stay blocked across resize until a successful commit.
+- Actual macOS ARM64 Release build 40189391576 PASS with Xcode 26.3 / iPhoneOS SDK 26.2 / iOS 18.0 floor; real Foundation helper 32 checks and asset containment 21 checks PASS. No simulator XCTest dispatch.
+- Original unsigned IPA 11,798,049 B SHA256 6a029b5fd4b71a19e236c499f585b80370b4b8ec560f84904d72d2c9e6cf57a8. Independent ZIP/plist/Mach-O/resource verification:23 checks pass,0 fail,7 explicit scope skips; all541 legal files unchanged.
+- Native macOS run40189738436 (CI-only80a9acaa) actually compiled and executed56 tests:3 async loader+25 texture/container CPU;13 failure/recovery+14 synthetic GPU+1 packed-quad pixel tests;0 skipped. Private process-owned GPU layers/textures and null audio only.
+- Initial native run40189391622 failed before tests under runner default Xcode16.4 missing C++20 jthread/stop_token; selecting installed stable Xcode26.3 and compile-only prerequisite check fixed test infrastructure, not production renderer policy.
+- Offline checks:122 iOS QA tests119 pass3 license-input skips;37 renderer-gate tests34 pass3 macOS prerequisites skipped;9 procedural fixture+8 verdict-parser tests pass. Routine upstream Windows gate previously failed platform assumptions; no full macOS app XCTest pass claimed.
+- Old empty packed fixture is import-only: Metal admission refuses no shader-translation attempt. Positive self-authored fixture includes model/material/shader pair/TEX; actual Mac quad pixels pass. ZIP creator metadata is now pinned and payload hashes reported; no Workshop assets committed.
+- Physical iPad testing/install explicitly deferred until user home. No iPad/RPC probes, VM/reference comparison, signing/install, AirCard Flash/system writes/respring, desktop automation or audio hardware. No on-device rendering fix or arbitrary licensed-scene pass claimed.
+
 ## 2026-10-25 — Canonical asset-root regression reproduced and packed iPad import retested
 
 - Physical55579c69 packed-scene import FAILED: user observed Unsafe imported asset path: scene.json; library unchanged. This is retained as failure, not inferred success from a disappearing picker.
@@ -123,11 +134,3 @@ Space mode reworked: wallpaper windows of a display in the mode stay on its curr
 - Website (separate repo, branch feat/telemetry-active-count): npm run typecheck OK; local wrangler dev on a scratch D1 with migration 0002: retries (same and lowercase ping) counted once, a day-behind clock kept its day, a far-off clock took the arrival day, bad schema/ping/day/agent 400, cron prune kept 400-day totals and 2-day pings.
 - Dashboard DAU/MAU SQL run on the scratch D1 gave the expected sums; the page's new section was not viewed in a browser (owner sign-in needed).
 - Not done: no D1 remote migration, no Worker deploy, no app Release build, no desktop run.
-
-## 2026-10-24 — Library location: move library and downloads to an external drive
-
-- python3 scripts/test.py: passed (Python stage OK; native 4051 passed, 0 failed, 47 skipped).
-- New: StorageMoveServiceTests, StorageCopierTests, StorageLocationTests, DownloaderStorageTests, WallpaperBackupTests moved-library round trip, PanelStorageActionsTests move actions.
-- Another disk is simulated with a fake StorageVolumeInspecting; no real external drive, ExFAT disk or eject was exercised.
-- Not checked: Settings › Storage rows and the Wallpaper Library Unavailable window visually, the removable-volume privacy prompt, a live Steam download to a moved library.
-- Renderer built in this worktree with scripts/build.py --renderer-only; bindings unchanged. App not rebuilt as Release.
