@@ -18,6 +18,7 @@ final class MediaCaptureFrameProvider: WallpaperFrameProvider {
     private let source: MediaFrameProviding
     private var preparedFrame: MediaFrame?
     private var measuredSize: CGSize = .zero
+    private var captureMaximumSize: CGSize = .zero
 
     init(source: MediaFrameProviding) {
         self.source = source
@@ -29,11 +30,23 @@ final class MediaCaptureFrameProvider: WallpaperFrameProvider {
     var duration: CMTime? { nil }
 
     func prepareForExport() async throws {
+        try await prepareForExport(maximumSize: captureMaximumSize)
+    }
+
+    func prepareForExport(maximumSize: CGSize) async throws {
+        preparedFrame = nil
+        measuredSize = .zero
+        try Task.checkCancellation()
+        guard maximumSize == .zero || LiveCaptureLimits.boundedSize(maximumSize) != nil else {
+            throw WallpaperFrameProviderError.unavailable(NSLocalizedString("export.web.invalidSize", comment: ""))
+        }
+        captureMaximumSize = maximumSize
         guard source.isFrameCaptureReady else {
             throw WallpaperFrameProviderError.unavailable(
                 String(localized: "The wallpaper surface has not rendered a frame that can be captured yet."))
         }
-        let frame = try await source.captureFrame(at: nil, maximumSize: .zero)
+        let frame = try await source.captureFrame(at: nil, maximumSize: maximumSize)
+        try Task.checkCancellation()
         guard frame.image.width > 0, frame.image.height > 0 else {
             throw WallpaperFrameProviderError.renderFailed(
                 String(localized: "The wallpaper surface returned an empty image."))
@@ -43,23 +56,26 @@ final class MediaCaptureFrameProvider: WallpaperFrameProvider {
     }
 
     func frame(at time: CMTime) async throws -> CVPixelBuffer? {
+        try Task.checkCancellation()
         guard preparedFrame != nil else { throw WallpaperFrameProviderError.notPrepared }
         let frame: MediaFrame
         switch source.frameSource {
         case .video:
-            frame = try await source.captureFrame(at: time, maximumSize: .zero)
+            frame = try await source.captureFrame(at: time, maximumSize: captureMaximumSize)
         case .web, .scene, .image:
             // Live surfaces have no independent timeline; capture the current frame.
             // The provider is still asked for every tick, so a changing web canvas
             // is sampled rather than a single still being repeated.
-            frame = try await source.captureFrame(at: nil, maximumSize: .zero)
+            frame = try await source.captureFrame(at: nil, maximumSize: captureMaximumSize)
         }
+        try Task.checkCancellation()
         return try Self.pixelBuffer(from: frame.image)
     }
 
     func finishExport() async {
         preparedFrame = nil
         measuredSize = .zero
+        captureMaximumSize = .zero
     }
 
     static func pixelBuffer(from image: CGImage) throws -> CVPixelBuffer {

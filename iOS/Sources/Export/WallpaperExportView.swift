@@ -9,10 +9,12 @@ public struct WallpaperExportView: View {
     let playback: PlaybackSettings
     var frameProvider: WallpaperFrameProvider?
     @State private var options = WallpaperExportSettings()
+    @State private var webController: WebWallpaperExportController?
     @State private var progress: WallpaperExportProgress?
     @State private var result: WallpaperExportResult?
     @State private var error: String?
     @State private var exportTask: Task<Void, Never>?
+    @State private var exportID: UUID?
     @State private var share = false
     @Environment(\.dismiss) private var dismiss
 
@@ -23,13 +25,22 @@ public struct WallpaperExportView: View {
     }
     private var chinese: Bool { Locale.preferredLanguages.first?.hasPrefix("zh") == true }
     private func l(_ en: String, _ zh: String) -> String { chinese ? zh : en }
-    private var renderingUnavailable: Bool { (item.kind == .scene || item.kind == .web) && frameProvider == nil }
+    private var renderingUnavailable: Bool { item.kind == .scene && frameProvider == nil }
 
     public var body: some View {
         NavigationStack {
-            Form {
+            VStack(spacing: 0) {
+                if item.kind == .web, frameProvider == nil, let webController {
+                    WebWallpaperExportPreview(controller: webController)
+                        .frame(height: 220)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                }
+                Form {
                 Section {
                     Text(verbatim: item.title).font(.headline)
+                    if item.kind == .web { Text(NSLocalizedString("export.web.liveNote", comment: "")).font(.footnote).foregroundStyle(.secondary) }
                     if renderingUnavailable {
                         Label(l("Real frame capture is not connected for this wallpaper. Export is unavailable; its preview image will not be substituted.",
                                 "此桌布尚未連接實際畫面擷取。無法匯出，且不會以預覽圖片冒充動畫。"), systemImage: "exclamationmark.triangle")
@@ -59,7 +70,7 @@ public struct WallpaperExportView: View {
                         Stepper(l("Width: \(options.resolution.customWidth)", "寬度：\(options.resolution.customWidth)"), value: $options.resolution.customWidth, in: 64...8192, step: 2)
                         Stepper(l("Height: \(options.resolution.customHeight)", "高度：\(options.resolution.customHeight)"), value: $options.resolution.customHeight, in: 64...8192, step: 2)
                     }
-                    Stepper(l("FPS: \(options.frameRate)", "影格率：\(options.frameRate)"), value: $options.frameRate, in: 1...120)
+                    Stepper(l("FPS: \(options.frameRate)", "影格率：\(options.frameRate)"), value: $options.frameRate, in: 1...(item.kind == .web ? 30 : 120))
                     Stepper(l("Duration: \(Int(options.duration)) seconds", "長度：\(Int(options.duration)) 秒"), value: $options.duration, in: 1...600, step: 1)
                     Picker(l("Compression quality", "壓縮品質"), selection: $options.quality.preset) {
                         ForEach(WallpaperExportQualityPreset.allCases, id: \.self) { Text(verbatim: $0.rawValue).tag($0) }
@@ -110,10 +121,14 @@ public struct WallpaperExportView: View {
                     .disabled(exportTask != nil || renderingUnavailable)
                     .accessibilityIdentifier("wm.export.start")
             }
+            }
             .navigationTitle(l("Export wallpaper", "匯出桌布"))
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(l("Done", "完成")) { dismiss() }.disabled(exportTask != nil) } }
             .onAppear {
-                options.frameRate = min(60, max(1, playback.framesPerSecond))
+                if item.kind == .web, frameProvider == nil, webController == nil {
+                    webController = WebWallpaperExportController(url: sourceURL, properties: item.properties, settings: playback)
+                }
+                options.frameRate = min(item.kind == .web ? 30 : 60, max(1, playback.framesPerSecond))
                 options.aspectMode = WallpaperExportAspectMode(rawValue: playback.scaling) ?? .fit
                 options.tendies.screenClass = ExportDevice.screenClass
                 options.tendies.wallpaperName = item.title
@@ -123,15 +138,43 @@ public struct WallpaperExportView: View {
         }.accessibilityIdentifier("wm.export")
     }
     private func start() {
+        guard exportTask == nil else { return }
         error = nil; result = nil
         let selected = options
+        let id = UUID()
+        exportID = id
+        progress = WallpaperExportProgress(phase: .preparing, completedFrames: 0, totalFrames: 0)
         exportTask = Task {
-            defer { exportTask = nil; progress = nil }
+            var provider = frameProvider
             do {
-                result = try await WallpaperExportService().export(item: item, sourceURL: sourceURL, settings: selected,
-                    frameProvider: frameProvider, progress: { value in Task { @MainActor in progress = value } })
-            } catch is CancellationError { error = l("Export cancelled.", "已取消匯出。") }
-            catch { self.error = error.localizedDescription }
+                try selected.validate()
+                if item.kind == .web, provider == nil {
+                    guard let webController else { throw WallpaperFrameProviderError.unavailable(NSLocalizedString("export.web.notReady", comment: "")) }
+                    let requested = selected.resolution.pixelSize(devicePixelSize: ExportDevice.screenPixelSize)
+                    provider = try await webController.prepare(
+                        outputSize: CGSize(width: requested.width, height: requested.height), frameRate: selected.frameRate)
+                }
+                let exported = try await WallpaperExportService().export(item: item, sourceURL: sourceURL, settings: selected,
+                    frameProvider: provider, progress: { value in
+                        Task { @MainActor in
+                            guard exportID == id else { return }
+                            progress = value
+                        }
+                    })
+                try Task.checkCancellation()
+                result = exported
+            } catch {
+                // The service wraps errors thrown during prepare, including
+                // cancellation. Preserve the UI's cancelled outcome either way.
+                self.error = Task.isCancelled || error is CancellationError
+                    ? l("Export cancelled.", "已取消匯出。") : error.localizedDescription
+            }
+            // Also clean up failed prepare paths (the service only finalizes a
+            // provider whose prepare returned successfully). Finish is idempotent.
+            await provider?.finishExport()
+            exportID = nil
+            exportTask = nil
+            progress = nil
         }
     }
 }

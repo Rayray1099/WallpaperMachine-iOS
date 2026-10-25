@@ -179,3 +179,11 @@
 "workshop.preview.stillOnly" = "Still author preview only";
 "export.title" = "Export";
 "library.import.backupRequiresRestore" = "To restore a library backup, use Restore Backup in Settings. Restoring replaces your current library.";
+"export.web.loadTimeout" = "The live web wallpaper did not load in the visible export preview within 10 seconds.";
+"export.web.notReady" = "The visible web wallpaper is not ready for capture.";
+"export.web.invalidSize" = "The live capture size must have finite, positive dimensions.";
+"export.web.captureTimeout" = "The web wallpaper did not return a snapshot within 10 seconds.";
+"export.web.empty" = "The web wallpaper snapshot is empty.";
+"export.web.invalidTime" = "The live capture timestamp is invalid.";
+"export.web.tooSlow" = "Live web capture fell behind real time. Reduce the frame rate or resolution and try again.";
+"export.web.liveNote" = "Web export records actual live WebKit snapshots in real time. It cannot seek arbitrary JavaScript or guarantee the requested frame rate. No author preview image is substituted.";

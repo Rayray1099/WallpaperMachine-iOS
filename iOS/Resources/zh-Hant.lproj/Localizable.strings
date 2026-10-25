@@ -179,3 +179,11 @@
 "workshop.preview.stillOnly" = "僅有作者提供的靜態預覽";
 "export.title" = "匯出";
 "library.import.backupRequiresRestore" = "若要還原圖庫備份，請使用「設定」中的「還原備份」。還原會取代目前的圖庫。";
+"export.web.loadTimeout" = "即時網頁桌布未在 10 秒內於可見匯出預覽中完成載入。";
+"export.web.notReady" = "可見網頁桌布尚未準備好擷取。";
+"export.web.invalidSize" = "即時擷取尺寸必須是有限的正數。";
+"export.web.captureTimeout" = "網頁桌布未在 10 秒內傳回快照。";
+"export.web.empty" = "網頁桌布快照是空的。";
+"export.web.invalidTime" = "即時擷取時間戳記無效。";
+"export.web.tooSlow" = "即時網頁擷取落後於實際時間。請降低影格率或解析度後重試。";
+"export.web.liveNote" = "網頁匯出會以實際時間錄製 WebKit 即時快照，無法任意跳轉 JavaScript 時間軸或保證指定影格率，也不會以作者預覽圖代替。";
