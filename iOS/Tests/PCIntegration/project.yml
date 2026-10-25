@@ -1,0 +1,96 @@
+# Actual production PC-converter UI/client and shared-assets importer with Apple XCTest.
+# Isolated blank UIKit app: no renderer archive, bridge, Steam, devices or real assets.
+name: WMPCIntegrationHarness
+options:
+  bundleIdPrefix: com.rayray1099.wallpapermachine
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    exactVersion: 0.9.19
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    TARGETED_DEVICE_FAMILY: "2"
+    SUPPORTED_PLATFORMS: iphonesimulator
+    SUPPORTS_MACCATALYST: NO
+    SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGN_IDENTITY: ""
+    DEVELOPMENT_TEAM: ""
+    GENERATE_INFOPLIST_FILE: YES
+    CLANG_ENABLE_MODULES: YES
+    CLANG_ENABLE_OBJC_ARC: YES
+  configs:
+    Debug:
+      ENABLE_TESTABILITY: YES
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+targets:
+  WMPCIntegrationHarness:
+    type: application
+    platform: iOS
+    sources:
+      - path: PCIntegrationApp.swift
+      - path: ../../Sources/Models/WallpaperModels.swift
+      - path: ../../Sources/Export/PCConverterConnection.swift
+      - path: ../../Sources/Export/PCConverterClient.swift
+      - path: ../../Sources/Export/PCConverterView.swift
+      - path: ../../Sources/Export/ExportDevice.swift
+      - path: ../../Sources/Export/ExportGeometry.swift
+      - path: ../../Sources/Export/WallpaperExportSettings.swift
+      - path: ../../Sources/Export/TendiesScreenClass.swift
+      - path: ../../Sources/Export/TendiesManifest.swift
+      - path: ../../Sources/Export/KeyedArchiveBuilder.swift
+      - path: ../../Sources/Export/ZipArchiveWriter.swift
+      - path: ../../Sources/Renderer/SceneSharedAssetsInstaller.swift
+      - path: ../../Sources/Renderer/SceneSharedAssetsView.swift
+    dependencies:
+      - package: ZIPFoundation
+      - sdk: CryptoKit.framework
+      - sdk: UIKit.framework
+      - sdk: SwiftUI.framework
+      - sdk: Foundation.framework
+      - sdk: Combine.framework
+      - sdk: UniformTypeIdentifiers.framework
+    settings:
+      base:
+        PRODUCT_NAME: WMPCIntegrationHarness
+        PRODUCT_MODULE_NAME: WallpaperMachineIOS
+        PRODUCT_BUNDLE_IDENTIFIER: com.rayray1099.wallpapermachine.ios.pcintegrationharness
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+  WMPCIntegrationTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ../Unit/Export/PCConverterClientTests.swift
+      - path: ../Unit/Renderer/SceneSharedAssetsInstallerTests.swift
+      - path: ../Support/IOSTestSupport.swift
+    dependencies:
+      - target: WMPCIntegrationHarness
+      - package: ZIPFoundation
+    settings:
+      base:
+        PRODUCT_NAME: WMPCIntegrationTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.rayray1099.wallpapermachine.ios.pcintegrationharness.tests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/WMPCIntegrationHarness.app/WMPCIntegrationHarness"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  WMPCIntegrationHarness:
+    build:
+      targets:
+        WMPCIntegrationHarness: all
+        WMPCIntegrationTests: [test]
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - name: WMPCIntegrationTests
+          parallelizable: false
+          randomExecutionOrder: false

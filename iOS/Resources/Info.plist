@@ -33,6 +33,13 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Connect to your computer on your local network to convert videos and download wallpaper archives.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>WallpaperMachine uses the microphone only when you turn on audio-reactive wallpapers.</string>
 	<key>UIApplicationSceneManifest</key>

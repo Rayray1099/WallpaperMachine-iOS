@@ -1,3 +1,5 @@
 /* WallpaperMachine iOS — Traditional Chinese Info.plist strings. */
 
+"NSLocalNetworkUsageDescription" = "連接區域網路中的電腦以轉換影片並下載桌布封存檔。";
+
 "NSMicrophoneUsageDescription" = "只有在開啟音訊反應桌布時，WallpaperMachine 才會使用麥克風。";

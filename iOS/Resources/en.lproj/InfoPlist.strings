@@ -1,3 +1,5 @@
 /* WallpaperMachine iOS — English Info.plist strings. */
 
+"NSLocalNetworkUsageDescription" = "Connect to your computer on your local network to convert videos and download wallpaper archives.";
+
 "NSMicrophoneUsageDescription" = "WallpaperMachine uses the microphone only when you turn on audio-reactive wallpapers.";

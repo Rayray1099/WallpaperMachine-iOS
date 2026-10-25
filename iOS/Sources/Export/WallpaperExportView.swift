@@ -16,6 +16,7 @@ public struct WallpaperExportView: View {
     @State private var exportTask: Task<Void, Never>?
     @State private var exportID: UUID?
     @State private var share = false
+    @State private var showPCConverter = false
     @Environment(\.dismiss) private var dismiss
 
     public init(item: WallpaperItem, sourceURL: URL, settings: PlaybackSettings,
@@ -49,6 +50,20 @@ public struct WallpaperExportView: View {
                     Text(l("Exports are files for sharing. They do not enable continuous third-party wallpaper playback on the iPad Home or Lock Screen.",
                            "匯出會產生可分享的檔案，不會讓第三方桌布在 iPad 主畫面或鎖定畫面持續播放。"))
                         .font(.footnote).foregroundStyle(.secondary)
+                }
+                if item.kind == .video || item.kind == .scene {
+                    Section(NSLocalizedString("export.pc.title", comment: "")) {
+                        if item.kind == .video {
+                            Button(NSLocalizedString("export.pc.open", comment: "")) { showPCConverter = true }
+                                .disabled(exportTask != nil)
+                                .accessibilityIdentifier("wm.export.pc.open")
+                            Text(NSLocalizedString("export.pc.remoteNote", comment: ""))
+                                .font(.footnote).foregroundStyle(.secondary)
+                        } else {
+                            Text(NSLocalizedString("export.pc.unsupported", comment: ""))
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
                 }
                 Section(l("Output", "輸出")) {
                     Picker(l("Format", "格式"), selection: $options.format) {
@@ -135,6 +150,9 @@ public struct WallpaperExportView: View {
             }
             .onDisappear { exportTask?.cancel() }
             .sheet(isPresented: $share) { if let result { ExportShareSheet(url: result.outputURL) } }
+            .sheet(isPresented: $showPCConverter) {
+                PCConverterView(item: item, sourceURL: sourceURL)
+            }
         }.accessibilityIdentifier("wm.export")
     }
     private func start() {

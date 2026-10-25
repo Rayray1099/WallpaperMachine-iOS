@@ -1,0 +1,100 @@
+# Actual production sources, Apple CryptoKit/ZIPFoundation and XCTest; no engine/stubs.
+name: iOS PC Integration (Apple XCTest)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios/main]
+    paths:
+      - "iOS/Sources/Export/**"
+      - "iOS/Sources/Models/WallpaperModels.swift"
+      - "iOS/Sources/Renderer/SceneSharedAssets*.swift"
+      - "iOS/Tests/PCIntegration/**"
+      - "iOS/Tests/Unit/Export/PCConverterClientTests.swift"
+      - "iOS/Tests/Unit/Renderer/SceneSharedAssetsInstallerTests.swift"
+      - "iOS/Tests/Support/IOSTestSupport.swift"
+      - "scripts/ios/check_pc_integration_simulator.py"
+      - "scripts/tests/test_ios_pc_integration_simulator.py"
+      - "scripts/ios/check_scene_host_simulator.py"
+      - "scripts/lib/xcode.py"
+      - ".github/workflows/ios-pc-integration-test.yml"
+  pull_request:
+    branches: [ios/main]
+    paths:
+      - "iOS/Sources/Export/**"
+      - "iOS/Sources/Models/WallpaperModels.swift"
+      - "iOS/Sources/Renderer/SceneSharedAssets*.swift"
+      - "iOS/Tests/PCIntegration/**"
+      - "iOS/Tests/Unit/Export/PCConverterClientTests.swift"
+      - "iOS/Tests/Unit/Renderer/SceneSharedAssetsInstallerTests.swift"
+      - "iOS/Tests/Support/IOSTestSupport.swift"
+      - "scripts/ios/check_pc_integration_simulator.py"
+      - "scripts/tests/test_ios_pc_integration_simulator.py"
+      - "scripts/ios/check_scene_host_simulator.py"
+      - "scripts/lib/xcode.py"
+      - ".github/workflows/ios-pc-integration-test.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-pc-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-apple-xctest:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+      PC_INTEGRATION_ARTIFACTS: ${{ github.workspace }}/artifacts/ios-pc-integration/run-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Check out exact source without stored credentials
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prepare XcodeGen only, never install a simulator runtime
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Darwin
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install --quiet xcodegen
+          fi
+          xcodegen --version
+          python3 --version
+
+      - name: Check exact-case verdict and simulator ownership logic offline
+        run: python3 -B -m unittest discover -s scripts/tests -p 'test_ios_pc_integration_simulator.py' -v
+
+      - name: Execute actual native PC and shared-assets XCTest cases
+        run: python3 -B scripts/ios/check_pc_integration_simulator.py --artifacts-dir "${PC_INTEGRATION_ARTIFACTS}"
+
+      - name: Verify cleanup of only this run's simulator
+        if: always()
+        run: python3 -B scripts/ios/check_pc_integration_simulator.py --cleanup-only --artifacts-dir "${PC_INTEGRATION_ARTIFACTS}"
+
+      - name: Upload actual xcresult and source-SHA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-pc-integration-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.PC_INTEGRATION_ARTIFACTS }}/*.json
+            ${{ env.PC_INTEGRATION_ARTIFACTS }}/*.log
+            ${{ env.PC_INTEGRATION_ARTIFACTS }}/summary.md
+            ${{ env.PC_INTEGRATION_ARTIFACTS }}/PCIntegration.xcresult/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Fail closed when setup never produced a native verdict
+        if: always()
+        run: |
+          if [ ! -f "${PC_INTEGRATION_ARTIFACTS}/report.json" ]; then
+            echo "## PC integration: no Apple XCTest verdict" >> "$GITHUB_STEP_SUMMARY"
+            echo "Setup did not reach actual tests. Zero native PC, shared-assets, iPad, transfer or wallpaper-install passes are claimed." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
