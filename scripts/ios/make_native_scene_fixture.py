@@ -131,11 +131,17 @@ def build_fixture(output: Path) -> dict:
         for name, data in files.items():
             info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
+            # ZipInfo otherwise selects Windows/Unix metadata from sys.platform.
+            # Pin the creator and regular-file mode; compressed bytes can still
+            # vary with zlib versions, so publish uncompressed member hashes too.
+            info.create_system = 3
+            info.external_attr = 0o100644 << 16
             stream.writestr(info, data)
     return {
         "project_directory": str(project), "archive": str(archive),
         "archive_bytes": archive.stat().st_size,
         "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+        "member_sha256": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
         "shared_asset_dependencies": [], "actual_gpu_frame_verified": False,
         "expected_quadrants": ["top-left red", "top-right green", "bottom-left blue", "bottom-right yellow"],
     }

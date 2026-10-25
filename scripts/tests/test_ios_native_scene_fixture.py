@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -11,6 +12,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / "ios" / "make_native_scene_fixture.py"
 SPEC = importlib.util.spec_from_file_location("ios_native_scene_fixture", SCRIPT)
@@ -113,6 +115,38 @@ class NativeSceneFixtureTests(unittest.TestCase):
         self.assertEqual(self.report["archive_sha256"], other["archive_sha256"])
         self.assertEqual(self.report["shared_asset_dependencies"], [])
         self.assertFalse(self.report["actual_gpu_frame_verified"])
+
+    def test_member_hashes_cover_exact_uncompressed_payloads(self):
+        with zipfile.ZipFile(self.archive) as archive:
+            self.assertEqual(set(self.report["member_sha256"]), set(archive.namelist()))
+            for name in archive.namelist():
+                expected = hashlib.sha256(archive.read(name)).hexdigest()
+                self.assertEqual(self.report["member_sha256"][name], expected)
+                self.assertEqual(expected, hashlib.sha256((self.project / name).read_bytes()).hexdigest())
+
+    def test_zip_creator_metadata_does_not_depend_on_host_defaults(self):
+        original_init = zipfile.ZipInfo.__init__
+
+        def windows_defaults(info, *args, **kwargs):
+            original_init(info, *args, **kwargs)
+            info.create_system = 0
+            info.external_attr = 0
+
+        def unix_defaults(info, *args, **kwargs):
+            original_init(info, *args, **kwargs)
+            info.create_system = 3
+            info.external_attr = 0o100600 << 16
+
+        with mock.patch.object(zipfile.ZipInfo, "__init__", windows_defaults):
+            windows = fixture.build_fixture(self.root / "windows-defaults")
+        with mock.patch.object(zipfile.ZipInfo, "__init__", unix_defaults):
+            unix = fixture.build_fixture(self.root / "unix-defaults")
+        self.assertEqual(Path(windows["archive"]).read_bytes(), Path(unix["archive"]).read_bytes())
+        self.assertEqual(windows["member_sha256"], unix["member_sha256"])
+        with zipfile.ZipFile(self.archive) as archive:
+            for info in archive.infolist():
+                self.assertEqual(info.create_system, 3)
+                self.assertEqual(info.external_attr, 0o100644 << 16)
 
     def test_existing_directory_and_file_are_never_overwritten(self):
         occupied = self.root / "occupied"

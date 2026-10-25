@@ -11,6 +11,7 @@ on:
       - "ThirdParty/**"
       - "scripts/ios/check_scene_startup.sh"
       - "scripts/ios/make_native_scene_fixture.py"
+      - "scripts/tests/test_ios_*.py"
       - ".github/workflows/ios-scene-check.yml"
   pull_request:
     branches: [ios/main]
@@ -19,6 +20,7 @@ on:
       - "ThirdParty/**"
       - "scripts/ios/check_scene_startup.sh"
       - "scripts/ios/make_native_scene_fixture.py"
+      - "scripts/tests/test_ios_*.py"
       - ".github/workflows/ios-scene-check.yml"
 
 permissions:
@@ -88,6 +90,9 @@ jobs:
           restore-keys: |
             ios-scene-host-${{ runner.os }}-${{ runner.arch }}-
 
+      - name: Test fixture formats and honest test verdicts
+        run: python3 -B -m unittest discover -s scripts/tests -p 'test_ios_*.py' -v
+
       - name: Execute actual CPU loader and gated native renderer regressions
         run: bash scripts/ios/check_scene_startup.sh --artifacts-dir "${SCENE_ARTIFACTS}"
 
@@ -100,6 +105,7 @@ jobs:
             ${{ env.SCENE_ARTIFACTS }}/*.log
             ${{ env.SCENE_ARTIFACTS }}/*.json
             ${{ env.SCENE_ARTIFACTS }}/summary.md
+            ${{ env.SCENE_ARTIFACTS }}/fixture/WM-QA-Native-Quadrants.zip
           if-no-files-found: warn
           retention-days: 7
 
