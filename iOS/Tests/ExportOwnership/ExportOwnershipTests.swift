@@ -3,6 +3,8 @@ import CoreImage
 import CoreVideo
 import Darwin
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 import XCTest
 @testable import WMExportOwnershipHarness
 
@@ -16,6 +18,8 @@ final class ExportOwnershipTests: XCTestCase {
     func testPlainObserve() async throws { try exercise(.plain) }
     func testAppendPoolObserve() async throws { try exercise(.appendPool) }
     func testPipelinePoolBounded() async throws { try exercise(.pipelinePool) }
+    func testImageIOPipelinePoolBounded() async throws { try exerciseComparison(.imageIO) }
+    func testRenderOnlyPoolObserve() async throws { try exerciseComparison(.renderOnly) }
 
     private func exercise(_ scope: Scope) throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -53,6 +57,9 @@ final class ExportOwnershipTests: XCTestCase {
                     }
                     written += 1
                     peakRSS = max(peakRSS, residentBytes())
+                    if written == 1 || written % 10 == 0 {
+                        print("OWNERSHIP progress scope=\(scope.rawValue) side=\(side) written=\(written) live=\(counters.snapshot.live) rssBytes=\(residentBytes())")
+                    }
                     // Stop on actual test-host RSS growth too: source release
                     // counters cannot observe separate decoded/JPEG output copies.
                     if peakRSS > initialRSS + 384 * 1024 * 1024 {
@@ -88,9 +95,118 @@ final class ExportOwnershipTests: XCTestCase {
                 XCTAssertEqual(written, requested)
                 XCTAssertLessThan(final.peak, 16, "Source storage must not grow with frame count")
             }
-            print("OWNERSHIP final scope=\(scope.rawValue) source=\(side)x\(side) output=\(output) requested=\(requested) written=\(written) created=\(final.created) released=\(final.released) live=\(final.live) peak=\(final.peak) initialRSSBytes=\(initialRSS) peakRSSBytes=\(peakRSS) stoppedAtSafetyCap=\(stopped)")
+            print("OWNERSHIP final scope=\(scope.rawValue) source=\(side)x\(side) output=\(output) requested=\(requested) written=\(written) created=\(final.created) released=\(final.released) live=\(final.live) peak=\(final.peak) initialRSSBytes=\(initialRSS) peakRSSBytes=\(peakRSS) teardownRSSBytes=\(residentBytes()) stoppedAtSafetyCap=\(stopped)")
         }
         print("Scope: actual UIKit/CoreImage/compositor/JPEG/ZIP source-buffer ownership; no AVAssetReader, source asset, device reset reproduction, total-memory bound or production-fix verdict.")
+    }
+
+    private enum Comparison: String { case imageIO, renderOnly }
+
+    /// Test-only stage isolation. Production compositor and ZIP writer remain
+    /// unchanged; only UIImage JPEG encoding is bypassed in the ImageIO control.
+    private func exerciseComparison(_ mode: Comparison) throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for (side, output, requested) in [
+            (320, PixelSize(width: 320, height: 480), 80),
+            (2160, PixelSize(width: 1668, height: 2420), 240)
+        ] {
+            let counters = SourceLifetimes()
+            let initialRSS = residentBytes()
+            var peakRSS = initialRSS
+            var written = 0
+            var stopped = false
+            try autoreleasepool {
+                let compositor = FrameCompositor(plan: ExportRenderPlan(pixelSize: output, aspectMode: .fit))
+                let archive = try ZipArchiveWriter(outputURL: directory.appendingPathComponent("\(mode.rawValue)-\(side).zip"))
+                defer { archive.abort() }
+                for index in 0..<requested {
+                    try autoreleasepool {
+                        let buffer = try makeBuffer(side: side, index: index, counters: counters)
+                        let image = try compositor.render(source: buffer)
+                        let rendered = try compositor.cgImage(for: image)
+                        XCTAssertEqual(rendered.width, output.width)
+                        XCTAssertEqual(rendered.height, output.height)
+                        if mode == .imageIO {
+                            let jpeg = try imageIOJPEG(rendered)
+                            // Pixel-decode first/last only: a second per-frame
+                            // decoder must not become this encoder ownership test.
+                            if index == 0 || index == requested - 1 { try verifyJPEG(jpeg, output: output) }
+                            try archive.addFile(path: "frame-\(index).jpg", data: jpeg)
+                        } else {
+                            try verifyPixels(rendered, output: output)
+                        }
+                    }
+                    written += 1
+                    peakRSS = max(peakRSS, residentBytes())
+                    if written == 1 || written % 10 == 0 {
+                        print("OWNERSHIP progress scope=\(mode.rawValue) side=\(side) written=\(written) live=\(counters.snapshot.live) rssBytes=\(residentBytes())")
+                    }
+                    if counters.snapshot.live >= 16 || peakRSS > initialRSS + 384 * 1024 * 1024 {
+                        stopped = true
+                        break
+                    }
+                }
+                if !stopped { _ = try archive.finish() }
+                print("OWNERSHIP inside scope=\(mode.rawValue) side=\(side) requested=\(requested) written=\(written) live=\(counters.snapshot.live) peak=\(counters.snapshot.peak) initialRSSBytes=\(initialRSS) peakRSSBytes=\(peakRSS) stoppedAtSafetyCap=\(stopped)")
+            }
+            let released = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                let value = counters.snapshot
+                return value.created == value.released
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [released], timeout: 5), .completed)
+            let final = counters.snapshot
+            XCTAssertEqual(final.created, written)
+            XCTAssertEqual(final.released, written)
+            XCTAssertEqual(final.live, 0)
+            if mode == .imageIO {
+                XCTAssertFalse(stopped, "ImageIO comparison must complete within unchanged safety caps")
+                XCTAssertEqual(written, requested)
+                XCTAssertLessThan(final.peak, 16)
+            }
+            print("OWNERSHIP final scope=\(mode.rawValue) side=\(side) requested=\(requested) written=\(written) created=\(final.created) released=\(final.released) live=\(final.live) peak=\(final.peak) initialRSSBytes=\(initialRSS) peakRSSBytes=\(peakRSS) teardownRSSBytes=\(residentBytes()) stoppedAtSafetyCap=\(stopped)")
+        }
+        print("Scope: test-only render/ImageIO isolation with actual production compositor/ZIP; not a production change or device-reset cause verdict.")
+    }
+
+    @inline(never)
+    private func imageIOJPEG(_ image: CGImage) throws -> Data {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else {
+            throw Failure()
+        }
+        CGImageDestinationAddImage(destination, image,
+            [kCGImageDestinationLossyCompressionQuality: 0.82] as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { throw Failure() }
+        return data as Data
+    }
+
+    /// Decode one JPEG at a time. No JPEG/image array or cached decode may become
+    /// the retention being measured; ImageIO caching is explicitly disabled.
+    private func verifyJPEG(_ data: Data, output: PixelSize) throws {
+        guard let source = CGImageSourceCreateWithData(data as CFData,
+                  [kCGImageSourceShouldCache: false] as CFDictionary),
+              let image = CGImageSourceCreateImageAtIndex(source, 0,
+                  [kCGImageSourceShouldCache: false] as CFDictionary) else { throw Failure() }
+        try verifyPixels(image, output: output)
+    }
+
+    private func verifyPixels(_ image: CGImage, output: PixelSize) throws {
+        XCTAssertEqual(image.width, output.width)
+        XCTAssertEqual(image.height, output.height)
+        // Touch decoded pixels through a fixed 1x1 CPU context, not another full
+        // frame. The centre is the procedural dark lower-right source quadrant.
+        var pixel: [UInt8] = [0, 0, 0, 0]
+        try pixel.withUnsafeMutableBytes { bytes in
+            guard let context = CGContext(data: bytes.baseAddress, width: 1, height: 1,
+                bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { throw Failure() }
+            context.translateBy(x: -CGFloat(output.width * 3 / 4), y: -CGFloat(output.height / 2))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: output.width, height: output.height))
+        }
+        XCTAssertGreaterThan(pixel[3], 240)
+        XCTAssertLessThan(pixel[1], 100)
     }
 
     /// Native test-host process only, not the runner/device/global free-memory metric.

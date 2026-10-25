@@ -104,12 +104,12 @@ jobs:
           xcodegen generate --spec iOS/Tests/ExportOwnership/project.yml --project iOS/Tests/ExportOwnership
           xcodebuild build-for-testing -project iOS/Tests/ExportOwnership/WMExportOwnershipHarness.xcodeproj -scheme WMExportOwnershipHarness -configuration Debug -sdk iphonesimulator -destination "id=$EXPORT_SIMULATOR_UDID" -derivedDataPath "$EXPORT_OWNERSHIP_DIR/DerivedData" CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$EXPORT_OWNERSHIP_DIR/build.log"
 
-      - name: Observe three exact pool scopes in independent test-host processes
+      - name: Observe five exact stage and pool controls in independent processes
         shell: bash
         run: |
           set -euo pipefail
           failed=0
-          for method in testPlainObserve testAppendPoolObserve testPipelinePoolBounded; do
+          for method in testPlainObserve testAppendPoolObserve testPipelinePoolBounded testImageIOPipelinePoolBounded testRenderOnlyPoolObserve; do
             xcrun simctl terminate "$EXPORT_SIMULATOR_UDID" com.rayray1099.wallpapermachine.ios.exportownershipharness >/dev/null 2>&1 || true
             if xcodebuild test-without-building -project iOS/Tests/ExportOwnership/WMExportOwnershipHarness.xcodeproj -scheme WMExportOwnershipHarness -configuration Debug -sdk iphonesimulator -destination "id=$EXPORT_SIMULATOR_UDID" -derivedDataPath "$EXPORT_OWNERSHIP_DIR/DerivedData" -resultBundlePath "$EXPORT_OWNERSHIP_DIR/$method.xcresult" -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 -only-testing:"WMExportOwnershipTests/ExportOwnershipTests/$method" CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$EXPORT_OWNERSHIP_DIR/$method.log"; then :; else failed=1; fi
             xcrun xcresulttool get test-results summary --path "$EXPORT_OWNERSHIP_DIR/$method.xcresult" --format json > "$EXPORT_OWNERSHIP_DIR/$method-summary.json"
@@ -117,14 +117,15 @@ jobs:
           done
           test "$failed" = 0
 
-      - name: Require all three named tests with zero skips or missing cases
+      - name: Require all five named tests with zero skips or missing cases
+        if: ${{ !cancelled() && env.EXPORT_SIMULATOR_UDID != '' }}
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json, os, pathlib, re
           root = pathlib.Path(os.environ["EXPORT_OWNERSHIP_DIR"])
-          for method in ["testPlainObserve", "testAppendPoolObserve", "testPipelinePoolBounded"]:
+          for method in ["testPlainObserve", "testAppendPoolObserve", "testPipelinePoolBounded", "testImageIOPipelinePoolBounded", "testRenderOnlyPoolObserve"]:
               summary = json.loads((root/(method+"-summary.json")).read_text())
               assert summary.get("result") == "Passed" and not summary.get("testFailures"), method
               assert summary.get("passedTests") == summary.get("totalTestCount") == 1, method
@@ -139,8 +140,8 @@ jobs:
               assert re.fullmatch(re.escape(method)+r"(?:\(\))?", cases[0].get("name", "")), cases
               assert re.fullmatch(r"(?:WMExportOwnershipTests[/.])?ExportOwnershipTests[/.]"+re.escape(method)+r"(?:\(\))?", cases[0].get("nodeIdentifier", "")), cases
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as out:
-              out.write("## Export ownership: 3 actual UIKit XCTest cases passed, zero skipped\n")
-              out.write("Plain and append-only pools are bounded observations, not full-frame-count pass claims if the safety cap stops them. Whole-pipeline pool must complete all 80 small and 240 native-size frames. All source allocations must release after teardown.\n")
+              out.write("## Export ownership: 5 actual UIKit XCTest cases passed, zero skipped\n")
+              out.write("Plain/append-only pools and render-only stage are bounded observations, not full-frame-count pass claims if safety caps stop them. Whole-pipeline and direct ImageIO controls must complete all 80 small and 240 native-size frames within unchanged caps. Every source allocation must release after teardown.\n")
               out.write("No production pooling change, AVAssetReader/device reset reproduction, total-memory guarantee or best-quality device export is established.\n")
           PY
 
