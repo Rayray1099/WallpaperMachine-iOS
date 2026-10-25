@@ -53,6 +53,14 @@ jobs:
           set -euo pipefail
           test "$(uname -s)" = Darwin
           test "$(uname -m)" = arm64
+          # The runner's default Xcode 16.4 SDK lacks std::jthread/stop_token.
+          # Match ci_setup.sh: use the newest installed stable Xcode, not the
+          # machine-wide xcode-select default, and preserve it in later steps.
+          xcode_app="$(python3 -c 'import pathlib,re; apps=[p for p in pathlib.Path("/Applications").glob("Xcode*.app") if re.fullmatch(r"Xcode_\d+(?:\.\d+)*\.app",p.name) and (p/"Contents/Developer").is_dir()]; version=lambda p: tuple(map(int,re.findall(r"\d+",p.name))); print(max(apps,key=version)) if apps else None')"
+          test -n "$xcode_app"
+          export DEVELOPER_DIR="${xcode_app}/Contents/Developer"
+          echo "DEVELOPER_DIR=${DEVELOPER_DIR}" >> "$GITHUB_ENV"
+          printf 'Selected native toolchain: %s\n' "$DEVELOPER_DIR"
           xcrun --sdk macosx --show-sdk-version
           xcodebuild -version
           # These are HOST dependencies, never linked into the iOS device archive.

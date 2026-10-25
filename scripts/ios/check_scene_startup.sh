@@ -117,13 +117,29 @@ try:
     env["CMAKE_PREFIX_PATH"] = ";".join(map(str, [*prefixes, prefix]))
     env["PKG_CONFIG_PATH"] = ":".join(str(p / "lib/pkgconfig") for p in prefixes)
     env["SDKROOT"] = capture(["xcrun", "--sdk", "macosx", "--show-sdk-path"])
-    env["CC"] = "/usr/bin/clang"
-    env["CXX"] = "/usr/bin/clang++"
+    # Resolve compiler binaries from the same selected Xcode as SDKROOT. A
+    # machine-wide default (Xcode 16.4 on macos-15) lacks C++20 std::jthread.
+    env["CC"] = capture(["xcrun", "--sdk", "macosx", "--find", "clang"])
+    env["CXX"] = capture(["xcrun", "--sdk", "macosx", "--find", "clang++"])
+    env["OBJCXX"] = env["CXX"]
+    report["xcode"] = capture(["xcodebuild", "-version"])
+    report["developer_dir"] = env.get("DEVELOPER_DIR", "xcode-select default")
+    report["sdkroot"] = env["SDKROOT"]
+    report["cxx"] = env["CXX"]
     env["WM_NATIVE_SCENE_FIXTURE"] = str(fixture / "WM-QA-Native-Quadrants")
     if fixture.exists():
         raise RuntimeError("fixture output already exists; select a fresh --artifacts-dir (nothing is deleted)")
     report["commit"] = capture(["git", "rev-parse", "HEAD"])
     report["toolchain"] = subprocess.check_output(["rustc", "--version"], cwd=root / "Renderer", env=env, text=True, timeout=120).strip()
+    # Compile only: reject an incompatible selected SDK before the engine build.
+    # No probe program is linked or run, and no GPU/audio/device API is touched.
+    smoke = out / "cxx20-jthread.cpp"
+    smoke.write_text("#include <thread>\n#include <stop_token>\nvoid check() { std::jthread worker([](std::stop_token) {}); worker.request_stop(); }\n", encoding="utf-8")
+    step = run_logged("cxx20-jthread", [env["CXX"], "-std=c++20", "-arch", "arm64", "-isysroot", env["SDKROOT"],
+                      "-mmacosx-version-min=15.0", "-fsyntax-only", str(smoke)], root, 60, env)
+    report["build_steps"].append(step)
+    if step["exit"] != 0:
+        raise RuntimeError("selected Xcode does not provide required C++20 jthread/stop_token; see " + str(out / step["log"]))
     for name, command, cwd, timeout in commands:
         step_env = env.copy()
         # Proc-macro dylibs must use the Rust compiler's own deployment default;
