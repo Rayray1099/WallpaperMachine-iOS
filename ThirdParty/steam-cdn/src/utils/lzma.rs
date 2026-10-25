@@ -91,3 +91,38 @@ pub async fn decompress(data: &[u8]) -> Result<Vec<u8>, Error> {
 
     Ok(decompressed_data)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn rejects_truncated_vz_header_without_panicking() {
+        let truncated = [0x56, 0x5a, b'a'];
+        assert!(decompress(&truncated).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn rejects_declared_output_above_limit_before_decoder() {
+        let mut data = vec![0u8; VZ_HEADER_LENGTH + 5 + VZ_FOOTER_LENGTH];
+        data[0..2].copy_from_slice(&VZ_HEADER.to_le_bytes());
+        data[2] = VZ_VERSION as u8;
+        data[7] = 0x5d;
+        data[12..16].copy_from_slice(&0u32.to_le_bytes());
+        data[16..20].copy_from_slice(&0x0400_0001u32.to_le_bytes());
+        data[20..22].copy_from_slice(&VZ_FOOTER.to_le_bytes());
+        assert!(decompress(&data).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn rejects_declared_dictionary_above_limit_before_decoder() {
+        let mut data = vec![0u8; VZ_HEADER_LENGTH + 5 + VZ_FOOTER_LENGTH];
+        data[0..2].copy_from_slice(&VZ_HEADER.to_le_bytes());
+        data[2] = VZ_VERSION as u8;
+        data[7] = 0x5d;
+        data[12..16].copy_from_slice(&(MAX_LZMA_DICTIONARY + 1).to_le_bytes());
+        data[16..20].copy_from_slice(&0u32.to_le_bytes());
+        data[20..22].copy_from_slice(&VZ_FOOTER.to_le_bytes());
+        assert!(decompress(&data).await.is_err());
+    }
+}

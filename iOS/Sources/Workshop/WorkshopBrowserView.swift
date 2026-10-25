@@ -3,11 +3,11 @@ import UIKit
 
 /// The Workshop tab. It is the iOS counterpart of Discover: real Steam browse, search,
 /// filters, collections, authors, subscriptions, cached previews and update checks. The
-/// entry point is exactly `WorkshopBrowserView(library:)`.
+/// receives the app-owned content download store separately from web sign-in.
 ///
-/// There is no download button that pretends to work. Wallpaper Engine's Workshop content is
-/// SteamPipe/UGC content that only Steam's desktop client may fetch for an owning account;
-/// the detail sheet says so and offers Steam's item page plus the real folder importer.
+/// Public browsing and native account-authorized content transfer are separate.
+/// The experimental downloader enforces Steam ownership and server access; author
+/// previews remain distinct from a real imported wallpaper's native playback.
 struct WorkshopBrowserView: View {
     @ObservedObject private var library: LibraryStore
     let contentDownloads: WorkshopContentDownloadStore

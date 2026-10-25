@@ -28,11 +28,11 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p artifacts/ios-steam
-          cargo test --manifest-path iOS/SteamTransport/Cargo.toml 2>&1 | tee artifacts/ios-steam/native-test.log
+          cargo test --manifest-path iOS/SteamTransport/Cargo.toml --locked 2>&1 | tee artifacts/ios-steam/native-test.log
       - name: Test bounded CDN parsers without live accounts
         run: |
           set -o pipefail
-          cargo test --manifest-path iOS/SteamTransport/Cargo.toml -p steam-cdn 2>&1 | tee artifacts/ios-steam/cdn-test.log
+          cargo test --manifest-path iOS/SteamTransport/Cargo.toml --locked -p steam-cdn 2>&1 | tee artifacts/ios-steam/cdn-test.log
       - name: Compile real iOS ARM64 static library
         run: |
           set -o pipefail

@@ -2298,8 +2298,6 @@ dependencies = [
 [[package]]
 name = "steam-cdn"
 version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48a8311e77f9cae1aca69e296450608f9cb389279c183fd833d8a32c6ce71eca"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -3191,6 +3189,7 @@ name = "wm-steam-transport"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "futures-util",
  "keyvalues-parser",
  "openssl",
  "serde",

@@ -125,6 +125,17 @@ class LicenseSourceTests(unittest.TestCase):
             with self.assertRaisesRegex(notices.NoticeError, "no license/notice"):
                 notices.crate_licenses(item, Path(temporary))
 
+    def test_declared_mit_steam_notice_does_not_pretend_to_be_upstream_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            manifest = Path(temporary) / "Cargo.toml"
+            manifest.write_text('[package]\nname="steam-vent"\nlicense="MIT"\n', encoding="utf-8")
+            found = notices.crate_licenses({"name": "steam-vent", "version": "0.3.1", "license": "MIT", "manifest_path": str(manifest)}, Path(temporary))
+            text = found[0].read_text(encoding="utf-8")
+            self.assertIn("do not contain a separate license text", text)
+            self.assertIn("Robin Appelman", text)
+            self.assertIn("Permission is hereby granted", text)
+            self.assertNotIn("Copyright (c) 2026", text)
+
     def test_license_lookup_fails_closed_when_no_text(self):
         with tempfile.TemporaryDirectory() as temporary:
             crate = Path(temporary) / "missing"

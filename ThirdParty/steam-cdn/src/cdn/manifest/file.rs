@@ -3,6 +3,14 @@ use tokio::io::AsyncWriteExt;
 
 use crate::{cdn::inner::InnerClient, Error};
 
+fn validate_chunk_offset(expected: u64, actual: u64) -> Result<(), Error> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(Error::Unexpected("non-contiguous manifest chunk offsets".into()))
+    }
+}
+
 #[derive(Debug)]
 pub struct ChunkData {
     pub(super) sha: Vec<u8>,
@@ -117,9 +125,7 @@ impl ManifestFile {
         // Fetch sequentially so even a file with millions of chunks never
         // schedules an unbounded future queue or retains speculative buffers.
         for chunk in order {
-            if chunk.offset != expected_offset {
-                return Err(Error::Unexpected("non-contiguous manifest chunk offsets".into()));
-            }
+            validate_chunk_offset(expected_offset, chunk.offset)?;
             let data = self.inner.get_chunk(self.depot_id, depot_key, chunk.id()).await?;
             if data.len() != chunk.original_size as usize || data.len() > 4 * 1024 * 1024 {
                 return Err(Error::Unexpected("invalid downloaded chunk length".into()));
@@ -136,5 +142,17 @@ impl ManifestFile {
         }
         stream.flush().await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_noncontiguous_offsets_before_any_fetch() {
+        assert!(validate_chunk_offset(0, 7).is_err());
+        assert!(validate_chunk_offset(8, 7).is_err());
+        assert!(validate_chunk_offset(7, 7).is_ok());
     }
 }

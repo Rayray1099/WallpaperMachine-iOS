@@ -1,0 +1,32 @@
+Steam-Vent Rust libraries: declared MIT licensing
+
+Source metadata for steam-vent 0.3.1 identifies the author as:
+Robin Appelman <robin@icewind.nl>
+Repository: https://github.com/icewind1991/steam-vent
+Current repository: https://codeberg.org/steam-vent/steam-vent
+
+The published Cargo manifests declare the SPDX license MIT but the inspected
+steam-vent source archive and repository do not contain a separate license text.
+This notice preserves that declaration and the named authors; it does not invent
+a copyright year or claim to be an original upstream LICENSE file. The package's
+Cargo metadata, source location and declared license are recorded in INDEX.txt.
+The standard MIT terms below were retrieved unchanged from the SPDX license list
+(MIT.txt, excluding the example copyright placeholder line), not authored here:
+https://github.com/spdx/license-list-data/blob/main/text/MIT.txt
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the
+following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial
+portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
+EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+USE OR OTHER DEALINGS IN THE SOFTWARE.

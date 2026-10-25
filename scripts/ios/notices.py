@@ -99,7 +99,15 @@ def crate_licenses(package: dict, cargo_home: Path) -> list[Path]:
         nested = manifest.parent / "openssl/LICENSE.txt"
         if package.get("name") == "openssl-src" and nested.is_file():
             return [nested]
-        fallback = ROOT / "Packaging/notices" / package.get("name", "")
+        # Steam-Vent publishes an MIT declaration but omits a separate text.
+        # This explicit notice preserves the actual declaration/author and the
+        # SPDX standard terms without pretending to be an upstream license file.
+        name = package.get("name", "")
+        if (name == "steam-vent" or name.startswith("steam-vent-")) and package.get("license") == "MIT":
+            declared_notice = ROOT / "Packaging/notices/steam-vent/NOTICE.txt"
+            if declared_notice.is_file():
+                return [declared_notice]
+        fallback = ROOT / "Packaging/notices" / name
         if fallback.is_dir():
             return find_licenses(fallback, ("LICENSE", "COPYING", "UNLICENSE", "COPYRIGHT"))
         raise
@@ -186,7 +194,7 @@ def generate(output: Path, deps_sources: Path, cargo_home: Path, zipfoundation: 
         for source in sources:
             dest = f"rust/{package['name']}-{package['version']}/{source.name}"
             add_copy(output, source, dest, index)
-        crate_entries.append(f"{package['name']} {package['version']} [{declared}]")
+        crate_entries.append(f"{package['name']} {package['version']} [{declared}] authors={package.get('authors', [])!r} repository={package.get('repository')!r}")
 
     for zip_license in find_licenses(zipfoundation, ("LICENSE", "COPYING")):
         add_copy(output, zip_license, f"zipfoundation/{zip_license.name}", index)

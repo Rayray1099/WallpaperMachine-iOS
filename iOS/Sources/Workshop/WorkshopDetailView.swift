@@ -179,7 +179,9 @@ struct WorkshopDetailView: View {
             Text(WS("Native Steam content sign-in is separate from Community browser sign-in. Wallpaper Engine ownership and Steam Guard are required; collections are not recursively downloaded.", "原生 Steam 內容登入與社群瀏覽器登入分開。需要擁有 Wallpaper Engine 並完成 Steam Guard 驗證；不會遞迴下載合集。"))
                 .font(.callout).foregroundStyle(.secondary)
             if contentDownloads.isBusy {
-                if let status = contentDownloads.status {
+                if contentDownloads.isImporting {
+                    Text(WS("Verifying the project and importing into your library…", "正在驗證專案並匯入媒體庫…"))
+                } else if let status = contentDownloads.status {
                     Text(WorkshopContentSignInView.phaseLabel(status.phase))
                     if status.phase == "guard" {
                         Text(WS("Steam is awaiting your Guard code or device confirmation.", "Steam 正等待 Guard 驗證碼或裝置確認。"))
@@ -198,7 +200,11 @@ struct WorkshopDetailView: View {
                 }
             } else if let error = contentDownloads.errorText {
                 Text(error).foregroundStyle(.red)
-                Button(WS("Try download again", "再次嘗試下載")) { Task { await contentDownloads.download(item) } }
+                if contentDownloads.signedIn {
+                    Button(WS("Try download again", "再次嘗試下載")) { Task { await contentDownloads.download(item) } }
+                } else {
+                    Button(WS("Sign in for downloads", "登入以下載")) { nativeSignIn = true }
+                }
             } else if contentDownloads.signedIn {
                 Button(store.isInstalled(item) ? WS("Download update", "下載更新") : WS("Download with Steam", "使用 Steam 下載")) {
                     Task { await contentDownloads.download(item) }
