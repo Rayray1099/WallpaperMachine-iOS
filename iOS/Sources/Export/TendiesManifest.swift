@@ -282,6 +282,11 @@ public enum TendiesManifest {
         let centerX = width / 2
         let centerY = height / 2
         let duration = Double(descriptor.frameCount) / descriptor.frameRate
+        // Each layer maps its local origin into the parent's origin:
+        // parentPoint = position + localPoint - boundsOrigin - anchor * boundsSize.
+        // The root uses a zero anchor; the wrapper and image use explicit centre
+        // anchors/positions. An omitted wrapper position shifts the entire image
+        // by -width/2, -height/2 even though its child is correctly centred.
         let frames = (0..<descriptor.frameCount)
             .map { "        <CGImage src=\"assets/\(descriptor.frameFileName(at: $0))\"/>" }
             .joined(separator: "\n")
@@ -292,9 +297,9 @@ public enum TendiesManifest {
         <caml xmlns="http://www.apple.com/CoreAnimation/1.0">
           <CALayer allowsEdgeAntialiasing="1" allowsGroupOpacity="1" anchorPoint="0 0" bounds="0 0 \(number(width)) \(number(height))" contentsFormat="RGBA8" cornerCurve="circular" hidden="0" name="_BACKGROUND" position="0 0">
             <sublayers>
-              <CATransformLayer allowsEdgeAntialiasing="1" allowsGroupOpacity="1" allowsHitTesting="1" bounds="0 0 \(number(width)) \(number(height))" contentsFormat="RGBA8" cornerCurve="circular" name="\(descriptor.sanitizedName)">
+              <CATransformLayer allowsEdgeAntialiasing="1" allowsGroupOpacity="1" allowsHitTesting="1" anchorPoint="0.5 0.5" bounds="0 0 \(number(width)) \(number(height))" contentsFormat="RGBA8" cornerCurve="circular" name="\(descriptor.sanitizedName)" position="\(number(centerX)) \(number(centerY))">
                 <sublayers>
-                  <CALayer allowsEdgeAntialiasing="1" allowsGroupOpacity="1" bounds="0 0 \(number(width)) \(number(height))" contentsFormat="RGBA8" cornerCurve="circular" name="CALayer1" position="\(number(centerX)) \(number(centerY))">
+                  <CALayer allowsEdgeAntialiasing="1" allowsGroupOpacity="1" anchorPoint="0.5 0.5" bounds="0 0 \(number(width)) \(number(height))" contentsFormat="RGBA8" cornerCurve="circular" name="CALayer1" position="\(number(centerX)) \(number(centerY))">
                     <contents type="CGImage" src="assets/\(descriptor.frameFileName(at: 0))"/>
                     <animations>
                       <animation type="CAKeyframeAnimation" calculationMode="linear" keyPath="contents" beginTime="1e-100" duration="\(number(duration))" removedOnCompletion="0" repeatCount="inf" repeatDuration="0" speed="1" timeOffset="0" autoreverses="0">
