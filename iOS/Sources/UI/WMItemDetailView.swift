@@ -36,7 +36,8 @@ struct WMItemDetailView: View {
             WMPreviewStage(
                 item: item,
                 url: model.playbackURL(for: item),
-                settings: model.library.settings
+                settings: model.library.settings,
+                microphoneResponse: model.microphoneResponse
             )
             .aspectRatio(16.0 / 9.0, contentMode: .fit)
             .frame(maxWidth: .infinity)

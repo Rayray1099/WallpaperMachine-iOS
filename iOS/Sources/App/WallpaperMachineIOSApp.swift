@@ -18,6 +18,7 @@ struct WallpaperMachineIOSApp: App {
         WindowGroup {
             WMRootView(model: model)
                 .onChange(of: scenePhase) { _, phase in
+                    model.microphoneResponse.setApplicationActive(phase == .active)
                     if phase != .active {
                         model.pausePlaylist()
                     }

@@ -15,7 +15,8 @@ struct WMFullscreenPreview: View {
                 WMPreviewStage(
                     item: item,
                     url: model.playbackURL(for: item),
-                    settings: model.library.settings
+                    settings: model.library.settings,
+                    microphoneResponse: model.microphoneResponse
                 )
                 .id(item.id)
                 .ignoresSafeArea()

@@ -119,6 +119,7 @@ struct WMWebWallpaperView: View {
     let url: URL
     let properties: [String: WallpaperProperty]
     let settings: PlaybackSettings
+    let microphoneResponse: MicrophoneAudioResponse
 
     @Environment(\.openURL) private var openURL
 
@@ -132,6 +133,7 @@ struct WMWebWallpaperView: View {
                 url: url,
                 properties: properties,
                 settings: settings,
+                microphoneResponse: microphoneResponse,
                 onFailure: { detail in
                     failureDetail = detail
                 },
@@ -177,6 +179,7 @@ private struct WMWebSurface: UIViewRepresentable {
     let url: URL
     let properties: [String: WallpaperProperty]
     let settings: PlaybackSettings
+    let microphoneResponse: MicrophoneAudioResponse
     let onFailure: (String) -> Void
     let onExternalURL: (URL) -> Void
 
@@ -184,6 +187,10 @@ private struct WMWebSurface: UIViewRepresentable {
         let view = WebWallpaperView(url: url, properties: properties)
         view.onFailure = { failure in
             context.coordinator.report(failure.localizedDescription)
+        }
+        view.onWindowVisibilityChange = { [weak view] visible in
+            guard let view else { return }
+            context.coordinator.visibilityChanged(visible, view: view)
         }
         view.onExternalNavigationRequested = { url in
             context.coordinator.external(url)
@@ -195,22 +202,44 @@ private struct WMWebSurface: UIViewRepresentable {
     func updateUIView(_ uiView: WebWallpaperView, context: Context) {
         context.coordinator.onFailure = onFailure
         context.coordinator.onExternalURL = onExternalURL
+        context.coordinator.microphoneResponse = microphoneResponse
         uiView.properties = properties
         uiView.apply(settings: settings)
     }
 
+    static func dismantleUIView(_ uiView: WebWallpaperView, coordinator: Coordinator) {
+        coordinator.visibilityChanged(false, view: uiView)
+    }
+
     func makeCoordinator() -> Coordinator {
-        Coordinator(onFailure: onFailure, onExternalURL: onExternalURL)
+        Coordinator(
+            onFailure: onFailure,
+            onExternalURL: onExternalURL,
+            microphoneResponse: microphoneResponse)
     }
 
     @MainActor
     final class Coordinator {
         var onFailure: (String) -> Void
         var onExternalURL: (URL) -> Void
+        var microphoneResponse: MicrophoneAudioResponse
 
-        init(onFailure: @escaping (String) -> Void, onExternalURL: @escaping (URL) -> Void) {
+        init(
+            onFailure: @escaping (String) -> Void,
+            onExternalURL: @escaping (URL) -> Void,
+            microphoneResponse: MicrophoneAudioResponse
+        ) {
             self.onFailure = onFailure
             self.onExternalURL = onExternalURL
+            self.microphoneResponse = microphoneResponse
+        }
+
+        func visibilityChanged(_ visible: Bool, view: WebWallpaperView) {
+            if visible {
+                microphoneResponse.setWebSurface(view, visible: true)
+            } else if microphoneResponse.webView === view {
+                microphoneResponse.setWebSurface(nil, visible: false)
+            }
         }
 
         func report(_ detail: String) {

@@ -32,6 +32,7 @@ struct WMBackupExport: Identifiable {
 final class WMAppModel: ObservableObject {
     let library: LibraryStore
     let microphone = WMMicrophoneController()
+    let microphoneResponse = MicrophoneAudioResponse()
 
     @Published var sidebarSelection: WMSidebarSelection = .all
     @Published var selectedItemID: WallpaperItem.ID?
@@ -70,6 +71,10 @@ final class WMAppModel: ObservableObject {
         microphoneObserver = microphone.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }
+        microphoneResponse.onFailure = { [weak self] failure in
+            self?.presentError(failure.localizedDescription)
+        }
+        microphoneResponse.apply(settings: library.settings)
     }
 
     // MARK: - Library reading
@@ -416,6 +421,7 @@ final class WMAppModel: ObservableObject {
         var settings = library.settings
         mutate(&settings)
         library.settings = settings
+        microphoneResponse.apply(settings: settings)
         scheduleSettingsSave()
     }
 
@@ -458,6 +464,7 @@ final class WMAppModel: ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             let granted = await self.microphone.requestAccess()
+            self.microphoneResponse.refreshPermission()
             if granted {
                 self.updateSettings { $0.microphoneEnabled = true }
             } else {

@@ -13,24 +13,24 @@ This file records implementation and verification separately. A source implement
 - Run `40163079781` built/merged the actual Rust+C++ renderer: 639 ARM64 iOS objects. Subsequent compiler failures in WebKit availability/property delivery and OSLog autoclosures were fixed from actual Xcode diagnostics.
 - Run `40163713936` successfully compiled the full Release device app and packaged an unsigned ARM64 IPA (5,302,602 bytes). Validation rejected only missing CryptoKit in the SDK-framework allowlist (both app and IPA checks); no downloadable IPA artifact was uploaded from that failed run. Corrected allowlist and bundled legal-notice generation are being verified in the next build.
 - User deferred physical-device testing and took the iPad away. No device control, LCSign signing or installation should occur until the user returns with testing readiness.
-- No WallpaperMachine IPA, installation or app runtime test yet. No FPS/app-memory measurements obtained. Runner process metrics are not app metrics.
+- An IPA was produced remotely by run `40163713936`, but a fully validated downloadable artifact is still pending. No installation or physical WallpaperMachine runtime test exists. No FPS/app-memory measurements obtained; runner process metrics are not app metrics.
 
-## Source implementation, pending native build/runtime validation
+## Feature implementation and remaining verification
 
 | Feature | Current source state | Outstanding verification/work |
 |---|---|---|
-| Scene engine | Real C++ Metal engine plus Rust wm-shader iOS cross-build and UIKit/CAMetalLayer host; C ABI status handling reviewed | Actual ARM64 compile/link; real assets/scenes on device |
-| Video | AVQueuePlayer/AVPlayerLooper MP4/MOV H264/HEVC, lifecycle, volume, scaling | Compile and physical seamless-loop playback; WebM standalone unsupported state |
-| Web | Local WKWebView, property/audio JavaScript, root containment and navigation guard | Compile, real WebGL assets/touch/audio, network policy regression |
+| Scene engine | Real C++ Metal engine plus Rust wm-shader iOS cross-build and UIKit/CAMetalLayer host; C ABI status handling reviewed | ARM64 compile/link passed; real assets/scenes on device remain deferred |
+| Video | AVQueuePlayer/AVPlayerLooper MP4/MOV H264/HEVC, lifecycle, volume, scaling | ARM64 compilation passed; physical seamless-loop playback deferred; standalone WebM remains unsupported |
+| Web | Local WKWebView, property/audio JavaScript, root containment and navigation guard | ARM64 compilation passed; real WebGL assets/touch/audio and network-policy runtime regression deferred |
 | Library | Managed copy/import, natural JSON model, favorites/collections/playlists/settings, ZIP backup/restore with containment and rollback | XCTest/iOS integration; thumbnails and folder-update cases |
-| iPad UI | Adaptive SwiftUI sidebar/grid/details/properties/settings/fullscreen/shortcuts, English/Traditional Chinese | Native compile; portrait/landscape/resizing/accessibility on iPad |
+| iPad UI | Adaptive SwiftUI sidebar/grid/details/properties/settings/fullscreen/shortcuts, English/Traditional Chinese | ARM64 compilation passed; portrait/landscape/resizing/accessibility on iPad deferred |
 | Workshop | Public browse/search/detail/preview/cache/update/import source | Runtime parsing/network tests. SteamPipe CM/depot authenticated downloads NOT implemented; public metadata has no file URL. No DRM/auth bypass |
-| Audio | Microphone-only AVAudioEngine/FFT source and web adapter | Unify source ownership; scene PCM bridge; permission/device tests. Other-app audio capture unavailable |
-| Export | Real decoded video/image movie/sequence/.tendies writers and integrated settings/share UI | Native build, output playback, longer exports. Live scene/web requires real injected provider, never preview still |
+| Audio | Microphone-only AVAudioEngine/FFT source; shared app-owned source wired into visible local web surfaces with opt-in/active/visible gating | New wiring awaiting compiler run; scene PCM bridge and real permission/device tests remain. Other-app audio capture unavailable |
+| Export | Real decoded video/image movie/sequence/.tendies writers and integrated settings/share UI | ARM64 compilation passed; output playback and longer exports untested. Live scene/web requires real injected provider, never preview still |
 | Tendies/AirCard | Generated iPad-aware archive structure based on reference source, no 300-frame ceiling | Experimental/unverified OS import, looping, metadata compatibility. No system DB writes or respring performed |
 | Build | Pushed native port; first real Actions run built QuickJS/FreeType/LZ4 with iPhoneOS SDK 26.2. Archive-index verifier failure fixed with all-object parser checks; desktop-only Metal memory APIs compile-time guarded | Iterate compiler/link/package failures to actual IPA; native simulator tests explicitly deferred, not passed |
 | LCSign | Not yet used | Discover correct installed app, transfer actual IPA, sign authorized identity, install and verify |
-| QA | 100 executable offline Python tests pass; shared model/repository Swift Windows typecheck and all iOS source syntax parse pass | Native XCTest/UI simulator run and actual installed iPad app regressions |
+| QA | 119 offline Python tests pass in continuation checkout (including local real-license inputs); portable Swift typechecks and all-source syntax parse pass | Native XCTest/UI simulator run and actual installed iPad app regressions |
 
 ## Known platform boundaries
 
@@ -39,7 +39,7 @@ The app is an in-app native wallpaper renderer. Public iOS APIs do not allow arb
 ## Local continuation checks
 
 - `python scripts/ios/build.py --check`: passed (static contract only).
-- `python -m unittest discover -s scripts/ios/qa/tests -p 'test_*.py'`: 100 passed.
+- `python -m unittest discover -s scripts/ios/qa/tests -p 'test_*.py'`: 119 passed in the continuation checkout. Two license-input smoke cases skip on clean checkouts without downloaded sources; actual CI license collection is separate.
 - Windows `swiftc -typecheck`: shared models/path/repository without ZIPFoundation;
   Workshop Foundation model/session/service subset; Foundation export geometry,
   settings, keyed archives and tendies manifest. All passed. Apple SDK branches
@@ -53,4 +53,4 @@ The app is an in-app native wallpaper renderer. Public iOS APIs do not allow arb
 
 ## Next build cycle
 
-Finish renderer host and exact build contract, review/test, commit and push ios/main, inspect actual macOS CI logs, correct underlying errors, download and validate actual IPA, LAN transfer to LCSign, sign/install, and exercise real scene/video/web/import/settings/export on the paired device.
+Finish validated artifact run including source-license payload; compile the reviewed shared microphone-to-web integration; download/check the actual IPA. Signing, installation and physical scene/video/web/import/settings/export tests are deferred until the user makes the iPad available again. Do not operate the device in the meantime.

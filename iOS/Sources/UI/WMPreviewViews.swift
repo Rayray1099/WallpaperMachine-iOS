@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UIKit
 
@@ -10,6 +11,7 @@ struct WMPreviewStage: View {
     let item: WallpaperItem
     let url: URL
     let settings: PlaybackSettings
+    let microphoneResponse: MicrophoneAudioResponse
 
     var body: some View {
         ZStack {
@@ -24,7 +26,11 @@ struct WMPreviewStage: View {
             case .video:
                 WMVideoWallpaperView(url: url, settings: settings)
             case .web:
-                WMWebWallpaperView(url: url, properties: item.properties, settings: settings)
+                WMWebWallpaperView(
+                    url: url,
+                    properties: item.properties,
+                    settings: settings,
+                    microphoneResponse: microphoneResponse)
             case .image:
                 WMImageWallpaperView(url: url, scaling: settings.scaling)
             }

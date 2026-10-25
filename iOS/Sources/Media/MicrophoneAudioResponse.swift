@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Routes microphone analysis to the surfaces that react to it.
 ///
@@ -25,20 +26,69 @@ final class MicrophoneAudioResponse {
   private(set) var isEnabled = false
   private(set) var permission: MicrophoneAudioAnalyzer.Permission
 
+  private var applicationActive: Bool {
+    didSet { reconcileCapture() }
+  }
+  private var visibleWebViewCount = 0
+  private var startGeneration = 0
+  private var notificationTokens: [NSObjectProtocol] = []
+
+  private var eligibility: MicrophoneCaptureEligibility {
+    MicrophoneCaptureEligibility(
+      isEnabled: isEnabled,
+      applicationActive: applicationActive,
+      visibleConsumerCount: visibleWebViewCount)
+  }
+
+  private var shouldCapture: Bool { eligibility.shouldCapture }
+
   init(analyzer: MicrophoneAudioAnalyzer = MicrophoneAudioAnalyzer()) {
     self.analyzer = analyzer
+    applicationActive = UIApplication.shared.applicationState == .active
     permission = analyzer.permission
     analyzer.onSpectrum = { [weak self] spectrum in
-      guard let self, self.isEnabled else { return }
+      guard let self, self.shouldCapture else { return }
       self.webView?.deliverAudio(spectrum.webBins)
       self.onSceneSpectrum?(spectrum)
     }
+
+    let center = NotificationCenter.default
+    notificationTokens.append(
+      center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) {
+        [weak self] _ in
+        Task { @MainActor in self?.setApplicationActive(true) }
+      })
+    notificationTokens.append(
+      center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) {
+        [weak self] _ in
+        Task { @MainActor in self?.setApplicationActive(false) }
+      })
     analyzer.onFailure = { [weak self] failure in
       self?.onFailure?(failure)
     }
   }
 
+  deinit {
+    for token in notificationTokens { NotificationCenter.default.removeObserver(token) }
+  }
+
   var latestSpectrum: AudioSpectrum { analyzer.latest }
+
+  /// A surface registers only while it is attached to a visible window.
+  func setWebSurface(_ surface: WebWallpaperView?, visible: Bool) {
+    if let current = webView, current !== surface {
+      current.setAudioResponseEnabled(false)
+    }
+    webView = surface
+    visibleWebViewCount = visible && surface != nil ? 1 : 0
+    surface?.setAudioResponseEnabled(isEnabled)
+    reconcileCapture()
+  }
+
+  func setApplicationActive(_ active: Bool) {
+    guard applicationActive != active else { return }
+    applicationActive = active
+  }
 
   /// Applies `PlaybackSettings.microphoneEnabled`; the permission prompt is only
   /// requested when the setting turns on, never at launch.
@@ -49,47 +99,40 @@ final class MicrophoneAudioResponse {
   func setEnabled(_ enabled: Bool) {
     guard enabled != isEnabled else { return }
     isEnabled = enabled
-    guard enabled else {
-      analyzer.stop()
-      permission = analyzer.permission
-      webView?.setAudioResponseEnabled(false)
-      return
-    }
-    webView?.setAudioResponseEnabled(true)
-    Task { [weak self] in
-      await self?.startIfPermitted()
-    }
+    webView?.setAudioResponseEnabled(enabled)
+    reconcileCapture()
   }
 
   /// Re-reads the system permission without prompting, for when the user returns
   /// from Settings.
   func refreshPermission() {
     permission = MicrophoneAudioAnalyzer.currentPermission()
-    guard isEnabled else { return }
-    if permission == .granted, !analyzer.isRunning {
-      Task { [weak self] in await self?.startIfPermitted() }
-    } else if permission != .granted, analyzer.isRunning {
-      analyzer.stop()
-    }
+    reconcileCapture()
   }
 
-  private func startIfPermitted() async {
-    guard isEnabled else { return }
-    permission = await analyzer.requestPermission()
-    guard isEnabled else { return }
-    switch permission {
-    case .granted:
+  private func reconcileCapture() {
+    startGeneration += 1
+    let generation = startGeneration
+    guard shouldCapture else {
+      analyzer.stop()
+      return
+    }
+    permission = MicrophoneAudioAnalyzer.currentPermission()
+    guard permission == .granted else {
+      analyzer.stop()
+      return
+    }
+    guard !analyzer.isRunning else { return }
+    Task { [weak self] in
+      guard let self, self.shouldCapture, self.startGeneration == generation else { return }
       do {
-        try analyzer.start()
+        try self.analyzer.start()
+        self.permission = self.analyzer.permission
       } catch let failure as MicrophoneFailure {
-        report(failure)
+        self.report(failure)
       } catch {
-        report(.engine(error.localizedDescription))
+        self.report(.engine(error.localizedDescription))
       }
-    case .denied:
-      report(.permissionDenied)
-    case .undetermined:
-      report(.permissionNotDetermined)
     }
   }
 
