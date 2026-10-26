@@ -28,7 +28,9 @@ class SharedAssetsPackTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="wm-shared-assets-test-")
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        # macOS exposes tempfile paths through /var -> /private/var. Our owned
+        # fixture is canonical; user-supplied source/output links remain refused.
+        self.root = Path(self.temporary.name).resolve()
         self.assets = self.root / "owned-assets"
         self.payloads = {
             "shaders/qa.vert": b'#include "common.inc"\nvoid main() {}\n',
@@ -229,6 +231,19 @@ class SharedAssetsPackTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pack.pack_assets(self.assets, self.assets / "new.zip")
         self.assertEqual(self.snapshot(), before)
+
+    def test_linked_source_or_output_ancestor_is_still_refused(self):
+        alias = self.root / "linked-parent"
+        try:
+            alias.symlink_to(self.root, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("directory symlinks unavailable")
+        with self.assertRaisesRegex(ValueError, "link or non-directory"):
+            pack.pack_assets(alias / "owned-assets", self.output, self.textures)
+        self.assertFalse(self.output.exists())
+        with self.assertRaisesRegex(ValueError, "link or non-directory"):
+            pack.pack_assets(self.assets, alias / "new.zip", self.textures)
+        self.assertFalse(self.output.exists())
 
     def test_output_parent_must_already_exist(self):
         output = self.root / "missing-parent/new.zip"
