@@ -1,0 +1,167 @@
+# User-authorized, validation-branch-only build of a pinned external installer.
+# No pairing data, signing credentials, releases or device operations enter CI.
+name: iOS AirCard Compatibility Validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios/validate-fixed-step-20261026]
+    paths:
+      - .github/workflows/ios-aircard-validation.yml
+      - scripts/ios/prepare_aircard_validation.py
+      - scripts/ios/package_aircard_validation.py
+      - scripts/ios/test_aircard_payload.rs
+      - scripts/tests/test_ios_aircard_validation.py
+      - scripts/tests/test_ios_aircard_package.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-aircard-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility-build:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      AIRCARD_SOURCE: ${{ github.workspace }}/.aircard-validation-source
+      AIRCARD_ARTIFACTS: ${{ github.workspace }}/artifacts/aircard-validation/run-${{ github.run_id }}
+      IPHONEOS_DEPLOYMENT_TARGET: '18.0'
+      PYTHONUTF8: '1'
+    steps:
+      - name: Check out validation tooling
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check out the exact upstream installer source
+        uses: actions/checkout@v4
+        with:
+          repository: Mak5er/AirCard-iOS
+          ref: 40640c4d827aeab8d798285b57d24fcf6be070d0
+          path: .aircard-validation-source
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Prepare Apple and Rust toolchains
+        run: |
+          set -euo pipefail
+          mkdir -p "$AIRCARD_ARTIFACTS"
+          echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
+          xcodebuild -version | tee "$AIRCARD_ARTIFACTS/xcode-version.log"
+          command -v xcodegen || brew install xcodegen
+          command -v swiftc
+          rustup target add aarch64-apple-ios
+          rustc --version | tee "$AIRCARD_ARTIFACTS/rust-version.log"
+
+      - name: Restore pinned dependency and Rust caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .aircard-validation-source/rust-core/target
+          key: aircard-validation-${{ runner.os }}-${{ runner.arch }}-40640c4-${{ hashFiles('scripts/ios/prepare_aircard_validation.py', 'scripts/ios/test_aircard_payload.rs') }}
+          restore-keys: |
+            aircard-validation-${{ runner.os }}-${{ runner.arch }}-40640c4-
+
+      - name: Apply the guarded installer-only compatibility patch
+        run: |
+          set -euo pipefail
+          python3 scripts/ios/prepare_aircard_validation.py \
+            --source "$AIRCARD_SOURCE" --report "$AIRCARD_ARTIFACTS/patch-report.json"
+          git -C "$AIRCARD_SOURCE" diff --check
+          git -C "$AIRCARD_SOURCE" diff --binary > "$AIRCARD_ARTIFACTS/upstream-changes.patch"
+          git rev-parse HEAD > "$AIRCARD_ARTIFACTS/validation-source-sha.txt"
+
+      - name: Test patch guards, actual Swift identity rewrite and IPA validation
+        env:
+          AIRCARD_VALIDATION_SOURCE: ${{ env.AIRCARD_SOURCE }}
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests -p 'test_ios_aircard_validation.py' -v \
+            2>&1 | tee "$AIRCARD_ARTIFACTS/patch-tests.log"
+          grep -Fx 'OK' "$AIRCARD_ARTIFACTS/patch-tests.log"
+          python3 -m unittest discover -s scripts/tests -p 'test_ios_aircard_package.py' -v \
+            2>&1 | tee "$AIRCARD_ARTIFACTS/package-tests.log"
+          grep -Fx 'OK' "$AIRCARD_ARTIFACTS/package-tests.log"
+
+      - name: Test the actual Rust folder-injection payload
+        working-directory: ${{ env.AIRCARD_SOURCE }}
+        run: |
+          set -euo pipefail
+          cargo test --locked --manifest-path rust-core/Cargo.toml --lib \
+            wm_posterboard_validation -- --nocapture \
+            2>&1 | tee "$AIRCARD_ARTIFACTS/payload-tests.log"
+          grep -F 'test result: ok. 2 passed; 0 failed; 0 ignored;' "$AIRCARD_ARTIFACTS/payload-tests.log"
+
+      - name: Rebuild the patched device ARM64 FFI
+        working-directory: ${{ env.AIRCARD_SOURCE }}
+        run: |
+          set -euo pipefail
+          cargo build --locked --manifest-path rust-core/Cargo.toml --release \
+            --target aarch64-apple-ios \
+            2>&1 | tee "$AIRCARD_ARTIFACTS/rust-ios-build.log"
+          xcodebuild -create-xcframework \
+            -library "$AIRCARD_SOURCE/rust-core/target/aarch64-apple-ios/release/libairlift_ffi.a" \
+            -headers "$AIRCARD_SOURCE/rust-core/include" \
+            -output "$RUNNER_TEMP/AirliftFFI-validation.xcframework" \
+            2>&1 | tee "$AIRCARD_ARTIFACTS/xcframework-build.log"
+          mv "$AIRCARD_SOURCE/AirliftFFI.xcframework" "$AIRCARD_SOURCE/AirliftFFI.baseline.xcframework"
+          cp -R "$RUNNER_TEMP/AirliftFFI-validation.xcframework" "$AIRCARD_SOURCE/AirliftFFI.xcframework"
+
+      - name: Compile the unsigned device app with the rebuilt FFI
+        working-directory: ${{ env.AIRCARD_SOURCE }}
+        run: |
+          set -euo pipefail
+          xcodegen generate --spec project.yml
+          xcodebuild -project AirCard-iOS.xcodeproj -scheme AirCard-iOS \
+            -configuration Release -derivedDataPath "$RUNNER_TEMP/aircard-validation-derived" \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGN_ENTITLEMENTS='' \
+            CODE_SIGNING_ALLOWED=NO STRIP_STYLE=non-global build \
+            2>&1 | tee "$AIRCARD_ARTIFACTS/xcode-build.log"
+
+      - name: Verify the dynamic Grappa callback survives the Release build
+        run: |
+          set -euo pipefail
+          binary="$RUNNER_TEMP/aircard-validation-derived/Build/Products/Release-iphoneos/AirCard-iOS.app/AirCard-iOS"
+          xcrun nm -gU "$binary" > "$AIRCARD_ARTIFACTS/defined-global-symbols.log"
+          grep -E '[[:space:]]_ALGetGrappaToken$' "$AIRCARD_ARTIFACTS/defined-global-symbols.log"
+          xcrun dyld_info -exports "$binary" > "$AIRCARD_ARTIFACTS/dyld-exports.log"
+          grep -E '[[:space:]]_ALGetGrappaToken([[:space:]]|$)' "$AIRCARD_ARTIFACTS/dyld-exports.log"
+
+      - name: Package and independently check the unsigned IPA
+        run: |
+          set -euo pipefail
+          python3 scripts/ios/package_aircard_validation.py \
+            --app "$RUNNER_TEMP/aircard-validation-derived/Build/Products/Release-iphoneos/AirCard-iOS.app" \
+            --source "$AIRCARD_SOURCE" --patch-report "$AIRCARD_ARTIFACTS/patch-report.json" \
+            --artifacts-dir "$AIRCARD_ARTIFACTS"
+          python3 scripts/ios/package_aircard_validation.py \
+            --ipa "$AIRCARD_ARTIFACTS/AirCard-WM27-Validation.ipa" \
+            --report "$AIRCARD_ARTIFACTS/independent-ipa-validation.json"
+
+      - name: Upload the validated unsigned installer
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aircard-wm27-validation-${{ github.run_id }}
+          path: ${{ env.AIRCARD_ARTIFACTS }}/*.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload scoped build and test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aircard-wm27-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.AIRCARD_ARTIFACTS }}/*.log
+            ${{ env.AIRCARD_ARTIFACTS }}/*.json
+            ${{ env.AIRCARD_ARTIFACTS }}/*.txt
+            ${{ env.AIRCARD_ARTIFACTS }}/*.patch
+          if-no-files-found: warn
+          retention-days: 7
