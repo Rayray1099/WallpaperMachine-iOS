@@ -297,3 +297,8 @@
 "scene.capture.tooSlow" = "Live scene capture could not maintain the requested timing. No lower frame rate was substituted.";
 "scene.capture.loadTimeout" = "The native scene did not become ready for capture within 10 seconds.";
 "export.scene.liveNote" = "Scene export captures the live native renderer, not an offline timeline. Requested native resolution is preserved; slow readback fails instead of silently lowering the frame rate.";
+"scene.offline.invalidSequence" = "Offline scene export requires sequential frames at the configured frame rate (at most 18,000 frames).";
+"scene.offline.nativeFailed" = "The native renderer could not produce the requested offline frame.";
+"scene.offline.sessionEnded" = "This offline scene export session has ended. Start a new export.";
+"scene.offline.unsupported" = "This scene uses features that are not supported by deterministic offline export.";
+"export.scene.offlineNote" = "Scene export advances the native renderer one exact frame at a time. Native resolution and the selected frame rate are preserved, but rendering may take longer than the animation. The preview appears when export starts.";

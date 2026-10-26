@@ -597,6 +597,128 @@ final class SceneHostLifecycleTests: XCTestCase {
             XCTAssertEqual(wm_scene_test_live_handle_count(), 1)
         }
     }
+    @MainActor
+    func testManualExportModeEnabledBeforeInitAndWaitsForPreparedStatusWithoutPresentedFrame() async throws {
+        try await withHarness { harness in
+            let view = harness.makeView(exportFrameRate: 60)
+            harness.attach(view)
+            let operations = harness.events.map(\.operation)
+            XCTAssertEqual(harness.events("enable_frame_export").map(\.fps), [60])
+            XCTAssertLessThan(try XCTUnwrap(operations.firstIndex(of: "enable_frame_export")),
+                              try XCTUnwrap(operations.firstIndex(of: "init")))
+            XCTAssertLessThan(try XCTUnwrap(operations.firstIndex(of: "init")),
+                              try XCTUnwrap(operations.firstIndex(of: "apply_config")))
+            XCTAssertEqual(view.offlineFrameRate, 60)
+            XCTAssertFalse(view.isOfflineFrameCaptureReady)
+            XCTAssertFalse(view.isFrameCaptureReady)
+            harness.presentedFrames(100)
+            XCTAssertFalse(view.isOfflineFrameCaptureReady, "Live health cannot invent manual preparation")
+            harness.presentedFrames(0)
+            wm_scene_test_set_export_status(1)
+            XCTAssertTrue(view.isOfflineFrameCaptureReady, "Index zero must not wait for a frame that only a request can produce")
+            XCTAssertFalse(view.isFrameCaptureReady, "Manual capture must never fall through to live snapshot capture")
+            let healthCalls = harness.events("health").count
+            harness.clock.now = 3_600
+            view.readHealth()
+            XCTAssertTrue(view.isOfflineFrameCaptureReady)
+            XCTAssertEqual(harness.events("health").count, healthCalls)
+            XCTAssertTrue(harness.events("request_export_frame").isEmpty, "Readiness queries must not render frames")
+            wm_scene_test_set_export_status(-1)
+            XCTAssertFalse(view.isOfflineFrameCaptureReady)
+            let diagnosis = "injected manual-export command-buffer failure"
+            wm_scene_test_set_backend_reason(diagnosis)
+            XCTAssertEqual(view.frameCaptureFailure, diagnosis,
+                           "A failed native frame must not be mislabeled as an unsupported scene")
+            view.readHealth()
+            XCTAssertEqual(try harness.status(in: view).text, diagnosis)
+            XCTAssertFalse(try harness.status(in: view).isHidden)
+            wm_scene_test_set_backend_reason("")
+            XCTAssertEqual(view.frameCaptureFailure,
+                           NSLocalizedString("scene.offline.nativeFailed", comment: ""))
+        }
+    }
+
+    @MainActor
+    func testManualExportEnableFailureStopsBeforeInitAndCleansAllocatedHandle() async throws {
+        try await withHarness { harness in
+            wm_scene_test_fail_next("enable_frame_export", "injected manual clock failure")
+            let view = harness.makeView(exportFrameRate: 60)
+            harness.attach(view)
+            XCTAssertEqual(harness.events("enable_frame_export").count, 1)
+            XCTAssertTrue(harness.events("init").isEmpty)
+            XCTAssertTrue(harness.events("init_metal").isEmpty)
+            XCTAssertTrue(harness.events("apply_config").isEmpty)
+            XCTAssertEqual(harness.events("shutdown").count, 1)
+            XCTAssertEqual(harness.events("delete").count, 1)
+            XCTAssertEqual(wm_scene_test_live_handle_count(), 0)
+            XCTAssertFalse(view.isOfflineFrameCaptureReady)
+            XCTAssertEqual(try harness.status(in: view).text, "injected manual clock failure")
+            let baseline = harness.events.count
+            harness.layout(view)
+            view.readHealth()
+            XCTAssertEqual(harness.events.count, baseline, "Failed manual initialization must not loop")
+        }
+    }
+
+    @MainActor
+    func testManualExportFinishClosesOnceAndLiveSessionsNeverUseManualABI() async throws {
+        try await withHarness { harness in
+            let live = harness.makeView()
+            harness.attach(live)
+            let liveSerial = try XCTUnwrap(harness.events("new").last).serial
+            XCTAssertTrue(harness.events("enable_frame_export").isEmpty)
+            XCTAssertFalse(live.isOfflineFrameCaptureReady)
+            XCTAssertFalse(harness.events.contains { $0.serial == liveSerial && $0.operation == "frame_export_status" })
+            live.shutdown()
+            let manual = harness.makeView(exportFrameRate: 60)
+            harness.attach(manual)
+            let manualSerial = try XCTUnwrap(harness.events("new").last).serial
+            wm_scene_test_set_export_status(1)
+            XCTAssertTrue(manual.isOfflineFrameCaptureReady)
+            manual.finishOfflineCapture()
+            manual.finishOfflineCapture()
+            XCTAssertFalse(manual.isOfflineFrameCaptureReady)
+            XCTAssertEqual(harness.events("shutdown").filter { $0.serial == manualSerial }.count, 1)
+            XCTAssertEqual(harness.events("delete").filter { $0.serial == manualSerial }.count, 1)
+            let baseline = harness.events.count
+            manual.apply(url: harness.urlA, settings: playback(), properties: [:])
+            harness.layout(manual)
+            manual.readHealth()
+            XCTAssertEqual(harness.events.count, baseline)
+            XCTAssertTrue(harness.events("request_export_frame").isEmpty)
+            XCTAssertEqual(wm_scene_test_live_handle_count(), 0)
+        }
+    }
+    @MainActor
+    func testPreparedManualSessionIgnoresIdenticalUpdatesButEndsOnChangedSettings() async throws {
+        try await withHarness { harness in
+            let settings = playback()
+            let view = harness.makeView(settings: settings, exportFrameRate: 60)
+            harness.attach(view)
+            let serial = try XCTUnwrap(harness.events("new").last).serial
+            wm_scene_test_set_export_status(1)
+            XCTAssertTrue(view.isOfflineFrameCaptureReady)
+            let baseline = harness.events.count
+            view.apply(url: harness.urlA, settings: settings, properties: [:])
+            let updates = Array(harness.events.dropFirst(baseline))
+            XCTAssertFalse(updates.isEmpty)
+            XCTAssertTrue(updates.allSatisfy { $0.operation == "frame_export_status" },
+                          "Identical SwiftUI updates cannot resend manual-session properties or quality")
+            var changed = settings
+            changed.renderScale = 0.5
+            view.apply(url: harness.urlA, settings: changed, properties: [:])
+            XCTAssertFalse(view.isOfflineFrameCaptureReady)
+            XCTAssertEqual(harness.events("shutdown").filter { $0.serial == serial }.count, 1)
+            XCTAssertEqual(harness.events("delete").filter { $0.serial == serial }.count, 1)
+            let afterTermination = harness.events.count
+            view.apply(url: harness.urlB, settings: settings, properties: [:])
+            harness.layout(view)
+            view.readHealth()
+            XCTAssertEqual(harness.events.count, afterTermination, "Another URL must not revive a consumed manual export session")
+            XCTAssertEqual(harness.events("new").count, 1)
+            XCTAssertEqual(wm_scene_test_live_handle_count(), 0)
+        }
+    }
 }
 
 private func playback(renderScale: Double = 1) -> PlaybackSettings {
@@ -677,7 +799,7 @@ private final class Harness {
         events.filter { $0.operation == operation }
     }
 
-    func makeView(settings: PlaybackSettings = PlaybackSettings()) -> SceneMetalSurface {
+    func makeView(settings: PlaybackSettings = PlaybackSettings(), exportFrameRate: Int? = nil) -> SceneMetalSurface {
         let clock = clock
         let assets = assets
         let environment = SceneHostEnvironment(
@@ -689,7 +811,8 @@ private final class Harness {
             displayScale: { _ in clock.scale },
             automaticallyPollHealth: false
         )
-        let view = SceneMetalSurface(url: urlA, settings: settings, properties: [:], environment: environment)
+        let view = SceneMetalSurface(url: urlA, settings: settings, properties: [:], environment: environment,
+                                     exportFrameRate: exportFrameRate)
         views.append(view)
         return view
     }

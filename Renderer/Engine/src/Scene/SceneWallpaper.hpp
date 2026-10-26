@@ -12,6 +12,7 @@
 #include "Scene/include/Scene/SceneResolution.hpp"
 #include "Scene/include/Scene/SceneVideoPath.hpp"
 #include "Scene/include/Scene/SceneUpdateDemand.hpp"
+#include "SceneFrameExport.hpp"
 
 #if defined(WESCENE_BUILD_TESTS) && defined(__APPLE__)
 struct owe_scene_wallpaper;
@@ -125,6 +126,11 @@ public:
     bool init();
     bool inited() const;
     void shutdown();
+    /// Immutable, export-only fixed clock. Must be enabled before init().
+    bool enableFrameExport(uint32_t fps);
+    int frameExportStatus() const;
+    uint32_t frameExportRate() const;
+    bool requestExportFrame(uint32_t index, SceneFrameExportRequest::Completion completion);
     /// Tags every line this scene's threads log with `scope`. Call before
     /// `init()`; see `SetWallpaperLogScope`.
     void setLogScope(uint64_t scope);

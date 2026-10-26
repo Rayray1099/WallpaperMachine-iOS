@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Native macOS/arm64 scene startup regressions, not an iOS app or device test.
-# Builds four selected engine binaries only. No windows, device RPC, sound output,
+# Builds six selected engine binaries only. No windows, device RPC, sound output,
 # application launch, simulator, screen capture or installed wallpaper assets.
 # GPU cases explicitly skip only when their own Metal availability check says so;
 # the real asynchronous SceneWallpaper loader cases must execute on every host.
@@ -25,13 +25,15 @@ args = parser.parse_args(sys.argv[2:])
 out = args.artifacts_dir.resolve()
 build = out / "engine"
 fixture = out / "fixture"
-binaries = ["scene_failure_policy_test", "tex_container_tests", "scene_harness_selftest", "ios_scene_startup_render_test"]
+binaries = ["scene_failure_policy_test", "tex_container_tests", "scene_harness_selftest", "ios_scene_startup_render_test",
+            "scene_frame_export_contract_test", "metal_scene_draw_smoke"]
 runs = [
     ("loader-cpu", binaries[0], "SceneLoadFailurePolicy.*", False),
     ("containers-cpu", binaries[1], "*", False),
     ("failure-recovery-gpu", binaries[0], "SceneFailurePolicy.*", True),
     ("synthetic-render-gpu", binaries[2], "SceneHarness.*", True),
     ("packed-fixture-gpu", binaries[3], "*", True),
+    ("manual-export-gpu", binaries[5], "MetalSceneDraw.ManualExportUsesFixedSimulationTimeDespiteSlowConsumer", True),
 ]
 shader = root / "Renderer/target/release/libwm_shader.a"
 commands = [
@@ -51,6 +53,7 @@ if args.dry_run:
     for name, binary, pattern, gpu in runs:
         print(f"{name} ({'explicit no-Metal skip allowed' if gpu else 'must pass, no skips'}): " + shlex.join([
             str(build / "tests" / binary), "--gtest_filter=" + pattern, "--gtest_output=json:" + str(out / (name + ".json"))]))
+    print("manual-export-cpu (release assertions remain active): " + str(build / "tests" / binaries[4]))
     print("WM_NATIVE_SCENE_FIXTURE=" + str(fixture / "WM-QA-Native-Quadrants"))
     raise SystemExit(0)
 if platform.system() != "Darwin" or platform.machine() != "arm64":
@@ -87,7 +90,21 @@ def run_logged(name, command, cwd, timeout, command_env):
             code = "timeout"
     return {"name": name, "exit": code, "log": log.name}
 
-def inspect_tests(path, gpu):
+def inspect_contract(path):
+    # A zero exit plus an old/truncated/generic PASS is not current coverage.
+    expected = "Scene frame export contract: 18000 sequential frames, admission/cancel/exactly-once PASS"
+    lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    # run_logged prefixes the exact command as one shell-style line.
+    if lines and lines[0].startswith("$ "):
+        lines = lines[1:]
+    if lines != [expected]:
+        raise ValueError("manual frame-export contract did not emit exactly its current completion verdict")
+    return {"gpu_required": False, "tests": 1, "passed": 1, "skipped": 0,
+            "cases": [{"name": "SceneFrameExport.Contract", "status": "passed", "reason": "explicit release checks"}],
+            "status": "passed"}
+
+
+def inspect_tests(path, gpu, expected_names=None):
     data = json.loads(path.read_text(encoding="utf-8"))
     cases = []
     for suite in data.get("testsuites", []):
@@ -101,6 +118,11 @@ def inspect_tests(path, gpu):
                           "status": "failed" if failures else "skipped" if skip else "passed", "reason": reason})
     if not cases:
         raise ValueError("test filter matched no tests; this is not passing coverage")
+    names = [case["name"] for case in cases]
+    if len(names) != len(set(names)):
+        raise ValueError("GTest report contains duplicate test identities")
+    if expected_names is not None and set(names) != set(expected_names):
+        raise ValueError("GTest report does not contain exactly the required test identities")
     if any(case["status"] == "failed" for case in cases):
         raise ValueError("GTest report contains failed tests")
     for case in cases:
@@ -150,6 +172,12 @@ try:
         report["build_steps"].append(step)
         if step["exit"] != 0:
             raise RuntimeError(f"{name} failed ({step['exit']}); see {out / step['log']}")
+    contract = run_logged("manual-export-cpu", [str(build / "tests" / binaries[4])], root, 60, env)
+    report["test_runs"].append(contract)
+    if contract["exit"] != 0:
+        raise RuntimeError("manual frame-export contract failed; see " + str(out / contract["log"]))
+    # The release binary uses explicit checks, not NDEBUG-disabled assert calls.
+    contract.update(inspect_contract(out / contract["log"]))
     for name, binary, pattern, gpu in runs:
         json_path = out / (name + ".json")
         # A stale GTest JSON must never turn an invocation failure into a pass.
@@ -162,7 +190,8 @@ try:
             raise RuntimeError(f"{name} failed ({result['exit']}); see {out / result['log']}")
         if not json_path.exists() or json_path.stat().st_mtime_ns == before:
             raise RuntimeError(name + " did not write a fresh GTest JSON report")
-        result.update(inspect_tests(json_path, gpu))
+        expected = {pattern} if name == "manual-export-gpu" else None
+        result.update(inspect_tests(json_path, gpu, expected_names=expected))
         result["status"] = "skipped-no-metal" if result["skipped"] == result["tests"] else "passed"
         print(f"{name}: {result['passed']} passed, {result['skipped']} skipped", flush=True)
     gpu_runs = [r for r in report["test_runs"] if r["gpu_required"]]

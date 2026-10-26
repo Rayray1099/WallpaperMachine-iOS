@@ -25,6 +25,27 @@ and moves whatever falls past ten verbatim into a monthly file under
 [archive/](archive/); promote anything durable before it goes. Editing an
 entry's recorded result is not allowed.
 
+## 2026-10-26 — iOS full PC exports verified; fixed-step source awaits Apple and pairing prerequisites
+
+- Installed ce6c5f4c native PC flow uploaded/converted/downloaded Dune173174746B SHA256bbee9496898da3dd62d8fbb692b415ee911d88c8feeb978572afc02cbd85e7df; all1976JPEGs independently byte-identical to prior fully decoded Dune. Earlier full Bocchi1800JPEG native transfer also verified.
+- AirCard imported exact full Dune; isolated one-item Flash rejected saved pairing keys/fallback tunnels, like Bocchi. No respring/system-playback pass, no 10FPS Flash, no final lock Shortcut. Original Steam/shared assets remain read-only.
+- Pending native fixed-step mode: exactindex/fps, zero first advance, same-command owned GPU readback, strict identity, no auto ticks/input/audio, immutable sessions; scripts/video/pendingtext rejected, no preview substitute. Not built/installed; no Wallpaper Engine reference comparison.
+- Actual Windows clang++ -std=c++20 -O2 -DNDEBUG -Wall -Wextra -Werror contract PASS all18000indices, upperbound and100completion/failure races. Temporary executable removed. Swift parse and test-only C recorder syntax PASS; not Apple SDK compile.
+- IOS_LOCAL_CONVERTER_INTEGRATION=1 python -B -m unittest discover -s scripts/tests -p test_ios*.py:155PASS0skip incl real tiny FFmpeg/Swift conversion. Renderer-driver portable37run34pass3macOS-prerequisite skips; no scene GPU pass.
+- Strict source closures/dryruns53Appleexport+25UIKitrecorderPASS; actual53/25 and native8tickfast/slowMetalregression UNRUN. CMake testThreads dependency scoped explicitly; standaloneCPU added routine renderer registry.
+- GitHub475d41b4 fullbuild40216595709/native40216595658 refused before any steps: payment/spending-limit annotation. ntfy notified; no billing changes or futile repeated dispatch. Latest pending renderer remains source-only; AVFoundation -11819 unresolved.
+
+## 2026-10-25 — iPad native fixture, Bocchi export diagnostics and isolated UIKit gates
+
+- Installed 92fdedc9 through exact-dylib LCSign copy; native quadrant output observed and recovered after invalid scene switch. Real Your Name scene 2064316482 fails with missing Metal translation; thumbnail is not output.
+- Bocchi 3407161102 copied read-only from authorized Workshop corpus; native muted changing video output. 2s/10FPS native tendies:20 frames9575805B, AirCard import accepted then explicitly deselected. User prohibits flashing that sample; no Flash/respring.
+- Diagnostic-only db3455de Release40201153315 passed full native/Swift/package;32 actual macOS Foundation diagnostic checks. Untouched IPA11814943B SHA256ceddf2cdc57788b947bc97071c32a24ac9759581cb6a948601040aecb271235e; verified separate presign copy installed preserving library.
+- Actual8s30FPS and30s60FPS native Fit/.82 exports fail copy stage AVFoundationErrorDomain:-11819. SDK AVError.h confirms mediaServicesWereReset; no memory/corruption cause inferred. Later2s30FPS succeeds60frames28711544B; high-quality full export unresolved.
+- Native reader40203515983 passed generated Main@5.2 2160square60FPS 8.2s, VFR timing and all10/30/60FPS plain/pool tick checks80/240/480 each. Decoder-only macOS, not full iPad export; initial test-only optional dictionary compile failure corrected.
+- Separate scene-host validation branch PR1 run40204631268 passed exactly16UIKit C-recorder tests/0skip +41offline verdict tests; actual raw xcresult independently checked and owned simulator deletion verified. Timer/notification dispatch, real counters/GPU/device excluded; not installed device source.
+- Ownership40204945730:actualZIP81checks pass;source lifetime retention reproduced. Whole-pipeline pool releases sources peak1 but native RSS safety-cap after22/240 fails; not sufficient memory fix. Further render/JPEG isolation pending; no speculative production pooling/quality change.
+- Original Steam assets, secrets and installed identity unchanged. All screenshots/private assets/local injection excluded from Git. User authorizes final validated best-quality Flash/respring independently; no low-quality fallback or rollback guarantee.
+
 ## 2026-10-25 — iOS physical geometry and scene host lifecycle
 
 - Source92fdedc9: physical output pixels independent of .25...1 native render quality; real set_render_scale before config; URL replacement with fresh session; deferred detached/collapsed work; first-error host shutdown latch; eligible monotonic first-frame wait, no fake readiness.
@@ -112,26 +133,3 @@ entry's recorded result is not allowed.
 - python scripts/test.py: FAIL on Windows in upstream macOS-oriented scripts (paths, encoding, Python API version and unavailable macOS utilities); native macOS gate not reached.
 - Native simulator XCTest/UI tests explicitly deferred pending simulator-specific renderer build; device C ABI archive cannot serve simulator.
 - No successful Xcode build, IPA, installation or physical-app verification at this checkpoint.
-
-## 2026-10-24 — Keep each visited desktop's wallpaper loaded and paused
-
-Follow-up to PR #77: a display with a different wallpaper for each desktop keeps the wallpapers of visited desktops parked (renderer, bridge, web and video hosts) instead of reloading them on every desktop change; memory pressure and Stop (free memory) let them go.
-
-- `python3 scripts/check_rust.py` — exit 0; core, bridge, core-integration and shader all pass, including the new `engine::actor::space_parking_tests` (9), `tests::space_parking` (3) and `first_frame_tests::a_wallpaper_the_display_keeps_parked_is_not_awaited`
-- `python3 scripts/check_renderer.py` — exit 0; corpus and media cases skipped as listed (no local assets)
-- `python3 scripts/test.py` — exit 0; 4107 tests: 4060 passed, 47 skipped, after one rerun: the first run on the final code failed `EnergyUsageMonitorTests/testKernelCountersForThisProcessAdvanceWithGPUWork` (3.7 mW against a 10 mW floor, right after the renderer check), which passed alone and in the rerun
-- New Swift tests: `WallpaperSpaceParkingTests`, per-window placement and opening windows in `WallpaperSpacePinningTests`, kept clips and pages in `NativeVideoWallpaperHostTests` and `WebWallpaperHostLifecycleTests`, the auditor's kept-window excuse, pressure edges in `MemoryPressureMonitorTests`
-- Not checked: no desktop run (no intro on return, the kept frame during a swipe, a shared wallpaper on several desktops, `CGSAddWindowsToSpaces`/`CGSRemoveWindowsFromSpaces`, the memory held, release under real memory pressure); the Release app was not rebuilt
-
-## 2026-10-23 — Different wallpaper for each desktop: windows kept on their desktop, saved posters, new panel UI
-
-Space mode reworked: wallpaper windows of a display in the mode stay on its current desktop and move hidden on a desktop change; other desktops get their wallpaper's saved poster; Apply sets the current desktop's wallpaper; the switch moved onto the display card and the toolbar menu with a desktop strip and a searchable chooser.
-
-- `python3 scripts/test.py` — first run 1 failure (SettingsSectionsLocalizationTests: "Mission Control"/"Spaces" keywords untranslated), fixed; rerun exit 0: 4083 tests, 4037 passed, 46 skipped
-- `python3 scripts/build.py --swift-only --configuration Release` — OK (ad-hoc signed)
-- Authorized desktop run, macOS 27.0.1, one display, three desktops: a standalone window probe showed CGSMoveWindowsToManagedSpace moves an own window to the current Space; re-ordering, toggling canJoinAllSpaces and moveToActiveSpace do not; an alpha-0 window stays occlusion-visible and keeps vending drawables
-- Live app: Mission Control showed desktop 2 Windows 11 and desktop 3 Plastic Beach (before: every desktop showed the live window); swipes show the destination's poster; warm loads shown 0.4 s (Plastic Beach) and 0.9–1.0 s (Windows 11) after the swipe ends
-- Relaunch without visiting: both other desktops and the current one got their own poster within ~3 s
-- Panel: card switch, desktop strip, chooser popover and the toolbar's toggle and "· Desktop 1" label rendered as intended
-- Gap: ad-hoc test builds ask again for System Audio Recording; an audio-responsive scene's first frame waits for the answer (6.4 s and 180 s stalls seen); a pixiv keychain prompt was denied
-- Not checked live: Apply assigning the current desktop (unit-tested), chooser search typing, multiple displays with separate Spaces, web/video on a pinned display, VoiceOver

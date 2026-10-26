@@ -108,6 +108,8 @@ public:
     virtual ~WPShaderValueUpdater() {}
 
     void FrameBegin() override;
+    /// Export-only clock injection; ordinary playback retains system time.
+    void SetWallClock(WallClock clock) { m_wall_clock = std::move(clock); }
 
     void InitUniforms(SceneNode*, const ExistsUniformOp&) override;
     void UpdateUniforms(SceneNode*, sprite_map_t&, const UpdateUniformOp&) override;

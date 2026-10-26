@@ -479,6 +479,7 @@ struct owe_scene_wallpaper {
     // First member, at offset 0: the pull-only readers receive the handle's
     // address as a plain pointer to the scene.
     wallpaper::SceneWallpaper scene;
+    __weak CAMetalLayer* export_layer { nil };
 
     std::shared_ptr<FirstFrameRegistration> first_frame;
     std::shared_ptr<PointerRegistration>    pointer_input;
@@ -593,6 +594,62 @@ extern "C" int owe_scene_wallpaper_shutdown(owe_scene_wallpaper* scene)
     });
 }
 
+extern "C" int owe_scene_wallpaper_enable_frame_export(owe_scene_wallpaper* scene, uint32_t fps)
+{
+    clear_last_error();
+    if (scene == nullptr) return fail("the scene host handle is NULL");
+    return guarded([&] {
+        return scene->scene.enableFrameExport(fps) ? 0 : fail("frame export must be enabled once before init with 1..120 FPS");
+    });
+}
+
+extern "C" int owe_scene_wallpaper_frame_export_status(owe_scene_wallpaper* scene)
+{
+    if (scene == nullptr) return -1;
+    return scene->scene.frameExportStatus();
+}
+
+extern "C" int owe_scene_wallpaper_request_export_frame(owe_scene_wallpaper* scene, uint32_t index,
+                                                        const char* context)
+{
+    clear_last_error();
+    if (scene == nullptr || context == nullptr) return fail("invalid export request");
+    return guarded([&] {
+        std::size_t length = 0;
+        while (length <= 64 && context[length] != '\0') ++length;
+        if (length == 0 || length > 64) return fail("invalid export request context");
+        const std::string token(context, length);
+        if (!std::all_of(token.begin(), token.end(), [](unsigned char c) {
+                return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                       (c >= '0' && c <= '9') || c == '-';
+            })) return fail("invalid export request context");
+        CAMetalLayer* layer = scene->export_layer;
+        if (layer == nil || !scene->scene.inited()) return fail("export surface is unavailable");
+        __weak CAMetalLayer* weakLayer = layer;
+        const uint32_t fps = scene->scene.frameExportRate();
+        // Capture only the weak layer and immutable request identity, never the
+        // native handle: an in-flight GPU callback may outlive its deletion.
+        const bool accepted = scene->scene.requestExportFrame(index,
+            [weakLayer, token, index, fps](int status, std::span<const uint8_t> pixels,
+                                      uint32_t width, uint32_t height, bool bgra) {
+                @autoreleasepool {
+                    NSData* bytes = status == 0 ? [NSData dataWithBytes:pixels.data() length:pixels.size()] : nil;
+                    NSString* text = [NSString stringWithUTF8String:token.c_str()];
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        CAMetalLayer* target = weakLayer;
+                        if (target == nil) return;
+                        NSMutableDictionary* info = [@{ @"context": text, @"status": @(status),
+                            @"index": @(index), @"frameRate": @(fps), @"width": @(width), @"height": @(height), @"bgra": @(bgra) } mutableCopy];
+                        if (bytes != nil) info[@"pixels"] = bytes;
+                        [[NSNotificationCenter defaultCenter] postNotificationName:@"WallpaperMachine.sceneExportFrameReady"
+                            object:target userInfo:info];
+                    });
+                }
+            });
+        return accepted ? 0 : fail("export is not ready, busy, or the frame index is not next");
+    });
+}
+
 extern "C" int owe_scene_wallpaper_init_metal(
     owe_scene_wallpaper* scene,
     void* metal_layer,
@@ -610,9 +667,20 @@ extern "C" int owe_scene_wallpaper_init_metal(
         return fail(problem);
     }
     if (! scene->scene.inited()) return fail("the scene host is not initialised");
+    if (scene->scene.frameExportStatus() != -2 && scene->scene.frameExportStatus() != 0)
+        return fail("a prepared export surface is immutable");
     return guarded([&] {
-        scene->scene.initSurface(make_surface_info(metal_layer, width, height, render_width,
-                                                   render_height, display_scale_factor));
+        scene->export_layer = (__bridge CAMetalLayer*)metal_layer;
+        auto info = make_surface_info(metal_layer, width, height, render_width,
+                                      render_height, display_scale_factor);
+        if (scene->scene.frameExportStatus() != -2) {
+            // Export requests carry private callback identity; do not install an
+            // unsolicited initial poster or allow ordinary poster wake requests.
+            info.wants_poster = {};
+            info.poster_ready = {};
+            info.bind_poster_wake = {};
+        }
+        scene->scene.initSurface(info);
         return 0;
     });
 }
@@ -646,8 +714,15 @@ extern "C" int owe_scene_wallpaper_finish_surface_reconfigure(
     }
     if (! scene->scene.inited()) return fail("the scene host is not initialised");
     return guarded([&] {
-        const auto info = make_surface_info(metal_layer, width, height, render_width,
-                                            render_height, display_scale_factor);
+        auto info = make_surface_info(metal_layer, width, height, render_width,
+                                      render_height, display_scale_factor);
+        if (scene->scene.frameExportStatus() != -2) {
+            if (scene->scene.frameExportStatus() != 0) return fail("a prepared export surface is immutable");
+            info.wants_poster = {};
+            info.poster_ready = {};
+            info.bind_poster_wake = {};
+            scene->export_layer = (__bridge CAMetalLayer*)metal_layer;
+        }
         if (! scene->scene.finishSurfaceReconfigure(info)) {
             return fail("the surface could not be rebuilt on the new layer");
         }

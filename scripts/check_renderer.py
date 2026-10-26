@@ -52,6 +52,7 @@ REGRESSION_BINARIES = {
     "metal_scene_draw_smoke": True, "metal_poster_capture_test": True,
     "metal_video_texture_test": True, "unchanged_present_test": True, "scene_failure_policy_test": True,
     "scene_load_sound_test": True,
+    "scene_frame_export_contract_test": False,
     "scene_harness_selftest": True, "ios_scene_startup_render_test": True,
     "backdrop_scene_test": True, "horizontal_flip_pointer_test": True,
     "scene_placeholder_picture_test": True, "scene_passthrough_layout_test": True,

@@ -61,6 +61,24 @@ REQUIRED = {
         "testProviderFinishInterruptsPacingAndOldWakeCannotReviveSession",
         "testProviderLossOfReadinessAfterCaptureResetsSession",
     ),
+    "OfflineSceneWallpaperExportTests": (
+        "testMailboxDecodesNativeChannelsAndAnnotatesVerifiedRationalTimestamp",
+        "testMailboxIgnoresUnrelatedContextAndLayerAndRejectsWrongFrameIdentity",
+        "testMailboxRejectsMalformedMatchingCompletionAndNativeFailure",
+        "testMailboxValidatesSequenceRateAndNativeSizeBeforeRequest",
+        "testMailboxSynchronousNativeRejectionDoesNotWaitForNotification",
+        "testMailboxTimeoutAndQueuedGenerationInvalidationAreTerminal",
+        "testMailboxCancellationAndBusyNeverConsumeAnotherIndex",
+        "testProviderPrimesFrameZeroExactlyOnceAndAcceptsEquivalentRationalTimes",
+        "testProviderEncodingDelayDoesNotChangeSimulationFrameIndices",
+        "testProviderRejectsSkippedRepeatedAndInvalidTimestampsWithoutNativeRequest",
+        "testProviderRejectsWrongSourceTimestampSizeAndUnreadyNativeFrame",
+        "testProviderCancellationAndFinishEndPendingRequestAndIgnoreLateReturn",
+    ),
+    "TendiesProviderExportTests": (
+        "testSyntheticProviderWritesEveryFrameWithCorrectDimensionsAndReferences",
+        "testMaximumQualityAppendLeavesCompleteFramesAcrossAutoreleaseBoundaries",
+    ),
 }
 UDID = "85C4FBBC-82E5-4490-8091-0E656098A995"
 RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5"
@@ -147,13 +165,14 @@ class PCIntegrationVerdictTests(unittest.TestCase):
         self.assertTrue(all(len(digest) == 64 for digest in manifest.values()))
         self.assertFalse(any("artifacts/" in path for path in manifest))
 
-    def test_previous_two_class_pass_cannot_satisfy_extended_scene_gate(self):
-        summary, tree = results()
-        tree["testNodes"][0]["children"] = tree["testNodes"][0]["children"][:2]
-        count = sum(len(methods) for cls, methods in REQUIRED.items() if cls != "SceneWallpaperExportTests")
-        summary.update(passedTests=count, totalTestCount=count)
-        with self.assertRaises(ValueError):
-            runner.inspect_results(summary, tree)
+    def test_previous_partial_class_passes_cannot_satisfy_full_export_gate(self):
+        for class_count in range(2, len(REQUIRED)):
+            summary, tree = results()
+            tree["testNodes"][0]["children"] = tree["testNodes"][0]["children"][:class_count]
+            count = sum(len(methods) for methods in list(REQUIRED.values())[:class_count])
+            summary.update(passedTests=count, totalTestCount=count)
+            with self.subTest(class_count=class_count), self.assertRaises(ValueError):
+                runner.inspect_results(summary, tree)
 
     def test_command_pins_owned_simulator_and_all_required_test_classes(self):
         command = runner.test_command(UDID, Path("out"))

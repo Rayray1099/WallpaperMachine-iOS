@@ -5,6 +5,7 @@
 #include "MetalRender/MetalVideoSupport.hpp"
 #include "Scene/include/Scene/SceneResolution.hpp"
 #include "Type.hpp"
+#include "Scene/SceneFrameExport.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -148,7 +149,8 @@ public:
     /// With scene optimisation on, a frame whose passes were all reused and
     /// whose composition would repeat the last present takes no drawable,
     /// commits nothing and also reports `presented` false.
-    bool drawFrame(Scene& scene, bool* presented = nullptr);
+    bool drawFrame(Scene& scene, bool* presented = nullptr,
+                   std::shared_ptr<SceneFrameExportRequest> export_request = {});
 
     /// Forgets the last presented composition, so the next frame presents
     /// whatever it would have presented anyway.

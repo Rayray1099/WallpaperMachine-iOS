@@ -164,7 +164,8 @@ public:
     /// Draws one frame. `presented` reports whether a frame actually reached
     /// the surface; the renderer may legitimately succeed without producing
     /// one, and the caller's first-frame bookkeeping has to tell the two apart.
-    bool drawFrame(Scene& scene, bool* presented = nullptr) {
+    bool drawFrame(Scene& scene, bool* presented = nullptr,
+                   std::shared_ptr<SceneFrameExportRequest> export_request = {}) {
 #ifdef WESCENE_BUILD_TESTS
         if (m_metal != nullptr) {
             if (auto forced = testing::SceneBackendFaults::Instance().Consume(
@@ -175,7 +176,7 @@ public:
             }
         }
 #endif
-        OWE_FORWARD(drawFrame(scene, presented));
+        OWE_FORWARD(drawFrame(scene, presented, std::move(export_request)));
         if (presented != nullptr) *presented = false;
         return false;
     }

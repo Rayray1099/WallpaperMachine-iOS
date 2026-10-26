@@ -71,6 +71,58 @@ final class TendiesProviderExportTests: XCTestCase {
             }
         }
     }
+
+    func testMaximumQualityAppendLeavesCompleteFramesAcrossAutoreleaseBoundaries() throws {
+        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let size = PixelSize(width: 64, height: 96)
+        let count = 61
+        let descriptor = TendiesWallpaperDescriptor(screenClass: .iPadPro11M4,
+            displayName: "Maximum Quality Pool Regression", identifier: 12345,
+            pixelSize: size, frameCount: count, frameRate: 60)
+        let compositor = FrameCompositor(plan: ExportRenderPlan(pixelSize: size, aspectMode: .stretch))
+        let url = temporary.appendingPathComponent("MaximumQuality.tendies")
+        let writer = try TendiesExportWriter(descriptor: descriptor, outputURL: url,
+            compositor: compositor, jpegQuality: 1, includesDisplayNameMetadata: true)
+        do {
+            for index in 0..<count {
+                try autoreleasepool {
+                    let color = index.isMultiple(of: 2) ? CIColor(red: 1, green: 0, blue: 0)
+                        : CIColor(red: 0, green: 0, blue: 1)
+                    let image = CIImage(color: color).cropped(to: CGRect(x: 0, y: 0, width: size.width, height: size.height))
+                    try writer.append(compositor.render(source: image), frameIndex: index)
+                }
+                XCTAssertEqual(writer.writtenFrames, index + 1)
+            }
+            _ = try writer.finish()
+        } catch {
+            writer.cancel()
+            throw error
+        }
+        let archive = try Archive(data: Data(contentsOf: url), accessMode: .read)
+        var jpegByteCount: Int64 = 0
+        for index in 0..<count {
+            let entry = try XCTUnwrap(archive[descriptor.frameMemberPath(at: index)])
+            var data = Data()
+            _ = try archive.extract(entry) { data.append($0) }
+            jpegByteCount += Int64(data.count)
+            let image = try XCTUnwrap(UIImage(data: data)?.cgImage)
+            XCTAssertEqual(image.width, size.width)
+            XCTAssertEqual(image.height, size.height)
+            let context = try XCTUnwrap(CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8,
+                bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            let pixel = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
+            XCTAssertEqual(Double(pixel[0]), index.isMultiple(of: 2) ? 255.0 : 0.0, accuracy: 5)
+            XCTAssertEqual(Double(pixel[1]), 0, accuracy: 5)
+            XCTAssertEqual(Double(pixel[2]), index.isMultiple(of: 2) ? 0.0 : 255.0, accuracy: 5)
+        }
+        XCTAssertEqual(writer.writtenFrames, count)
+        XCTAssertEqual(writer.writtenFrameBytes, jpegByteCount)
+        XCTAssertEqual(archive.filter { $0.path.hasSuffix(".jpg") }.count, count)
+    }
 }
 
 @MainActor

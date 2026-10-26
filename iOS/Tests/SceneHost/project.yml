@@ -37,6 +37,7 @@ targets:
       - path: SceneHostNativeStub.c
       - path: ../../Sources/Renderer/SceneWallpaperView.swift
       - path: ../../Sources/Renderer/SceneNativeFrameCapture.swift
+      - path: ../../Sources/Renderer/OfflineSceneFrameCapture.swift
       - path: ../../Sources/Media/MediaFrame.swift
       - path: ../../Sources/Renderer/SceneSharedAssetsCoordinator.swift
       - path: ../../Sources/Renderer/SceneResourceDirectories.swift

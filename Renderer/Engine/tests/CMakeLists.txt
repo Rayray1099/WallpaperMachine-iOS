@@ -38,6 +38,16 @@ gtest_discover_tests(
     DISCOVERY_TIMEOUT 60
 )
 
+# Manual scene-export admission/timeline contract: no renderer or GPU required.
+# Imported package targets are scoped to the directory that discovers them;
+# src/'s Threads::Threads is not visible in this sibling test directory.
+find_package(Threads REQUIRED)
+add_executable(scene_frame_export_contract_test scene_frame_export_contract_test.cpp)
+target_include_directories(scene_frame_export_contract_test PRIVATE ../src)
+target_compile_features(scene_frame_export_contract_test PRIVATE cxx_std_20)
+target_link_libraries(scene_frame_export_contract_test PRIVATE Threads::Threads)
+add_test(NAME scene_frame_export_contract_test COMMAND scene_frame_export_contract_test)
+
 # utils_known_answer_tests.cpp pins outputs of the utils the scene engine relies on bit for bit.
 # linalg_tests.cpp does the same for Utils/Linalg.hpp (against linalg_golden.inc, and the
 # behaviour its call sites rely on).

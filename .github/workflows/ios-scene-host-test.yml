@@ -8,6 +8,10 @@ on:
     branches: [ios/main]
     paths:
       - "iOS/Sources/Renderer/SceneWallpaperView.swift"
+      - "iOS/Sources/Renderer/SceneNativeFrameCapture.swift"
+      - "iOS/Sources/Renderer/OfflineSceneFrameCapture.swift"
+      - "iOS/Sources/Renderer/SceneSharedAssetsCoordinator.swift"
+      - "iOS/Sources/Media/MediaFrame.swift"
       - "iOS/Sources/Renderer/SceneResourceDirectories.swift"
       - "iOS/Sources/Renderer/SceneSurfaceGeometry.swift"
       - "iOS/Sources/Renderer/SceneStartupWait.swift"
@@ -25,6 +29,10 @@ on:
     branches: [ios/main]
     paths:
       - "iOS/Sources/Renderer/SceneWallpaperView.swift"
+      - "iOS/Sources/Renderer/SceneNativeFrameCapture.swift"
+      - "iOS/Sources/Renderer/OfflineSceneFrameCapture.swift"
+      - "iOS/Sources/Renderer/SceneSharedAssetsCoordinator.swift"
+      - "iOS/Sources/Media/MediaFrame.swift"
       - "iOS/Sources/Renderer/SceneResourceDirectories.swift"
       - "iOS/Sources/Renderer/SceneSurfaceGeometry.swift"
       - "iOS/Sources/Renderer/SceneStartupWait.swift"

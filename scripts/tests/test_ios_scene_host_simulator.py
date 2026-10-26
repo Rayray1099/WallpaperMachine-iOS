@@ -46,6 +46,10 @@ REQUIRED_METHODS = (
     "testStaleInstallationTokenCannotReleaseAnotherPublicationGate",
     "testDismantledAndExplicitlyStoppedSurfacesNeverReviveAfterAssetsChange",
     "testSceneExportLeaseAndAssetPublicationAreMutuallyExclusive",
+    "testManualExportModeEnabledBeforeInitAndWaitsForPreparedStatusWithoutPresentedFrame",
+    "testManualExportEnableFailureStopsBeforeInitAndCleansAllocatedHandle",
+    "testManualExportFinishClosesOnceAndLiveSessionsNeverUseManualABI",
+    "testPreparedManualSessionIgnoresIdenticalUpdatesButEndsOnChangedSettings",
 )
 
 
@@ -133,13 +137,13 @@ class ResultVerdictTests(unittest.TestCase):
     def test_actual_tree_cases_match_summary_and_have_integer_counts(self):
         summary, tree = results()
         actual = runner.inspect_results(summary, tree)
-        self.assertEqual((actual["total"], actual["passed"], actual["failed"], actual["skipped"]), (21, 21, 0, 0))
-        self.assertEqual(len(actual["cases"]), 21)
+        self.assertEqual((actual["total"], actual["passed"], actual["failed"], actual["skipped"]), (len(REQUIRED_METHODS), len(REQUIRED_METHODS), 0, 0))
+        self.assertEqual(len(actual["cases"]), len(REQUIRED_METHODS))
         self.assertTrue(all(name.startswith("SceneHostLifecycleTests/") for name in actual["cases"]))
 
     def test_zero_or_insufficient_test_runs_cannot_pass(self):
-        for count in (0, 1, 9, 10, 14, 15, 16, 20):
-            with self.subTest(count=count), self.assertRaisesRegex(ValueError, "exactly 21"):
+        for count in (0, 1, 9, 10, 14, 15, 16, 20, 21, 23):
+            with self.subTest(count=count), self.assertRaisesRegex(ValueError, "exactly " + str(len(REQUIRED_METHODS))):
                 runner.inspect_results(*results(REQUIRED_METHODS[:count]))
 
     def test_every_named_behavior_is_required_even_with_matching_counts(self):
@@ -150,12 +154,12 @@ class ResultVerdictTests(unittest.TestCase):
                 runner.inspect_results(*results(methods))
 
     def test_old_sixteen_cases_plus_unrelated_fillers_are_not_current_coverage(self):
-        stale = REQUIRED_METHODS[:16] + tuple("testLegacyPadding" + str(index) for index in range(5))
+        stale = REQUIRED_METHODS[:16] + tuple("testLegacyPadding" + str(index) for index in range(len(REQUIRED_METHODS) - 16))
         with self.assertRaisesRegex(ValueError, "case set differs"):
             runner.inspect_results(*results(stale))
 
     def test_unexpected_extra_case_is_not_silently_accepted(self):
-        with self.assertRaisesRegex(ValueError, "exactly 21"):
+        with self.assertRaisesRegex(ValueError, "exactly " + str(len(REQUIRED_METHODS))):
             runner.inspect_results(*results(REQUIRED_METHODS + ("testUnrelatedPassingBehavior",)))
 
     def test_known_fully_qualified_identities_and_case_order_are_supported(self):
@@ -165,7 +169,7 @@ class ResultVerdictTests(unittest.TestCase):
             for case in leaves(tree):
                 case["nodeIdentifier"] = prefix + "SceneHostLifecycleTests" + separator + case["name"]
             with self.subTest(prefix=prefix):
-                self.assertEqual(runner.inspect_results(summary, tree)["total"], 21)
+                self.assertEqual(runner.inspect_results(summary, tree)["total"], len(REQUIRED_METHODS))
 
     def test_leaf_identifier_not_ancestor_label_proves_case_identity(self):
         for identity in ("OtherTests/" + REQUIRED_METHODS[0] + "()",

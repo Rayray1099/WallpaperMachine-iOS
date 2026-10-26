@@ -75,6 +75,14 @@ targets:
         group: ProductionSources
       - path: ../../Sources/Export/SceneWallpaperExportProvider.swift
         group: ProductionSources
+      - path: ../../Sources/Renderer/OfflineSceneFrameCapture.swift
+        group: ProductionSources
+      - path: ../../Sources/Export/OfflineSceneWallpaperExportProvider.swift
+        group: ProductionSources
+      - path: ../../Sources/Export/FrameCompositor.swift
+        group: ProductionSources
+      - path: ../../Sources/Export/TendiesExportWriter.swift
+        group: ProductionSources
     dependencies:
       - package: ZIPFoundation
       - sdk: CryptoKit.framework
@@ -87,6 +95,8 @@ targets:
       - sdk: CoreMedia.framework
       - sdk: CoreVideo.framework
       - sdk: QuartzCore.framework
+      - sdk: CoreImage.framework
+      - sdk: ImageIO.framework
     settings:
       base:
         PRODUCT_NAME: WMPCIntegrationHarness
@@ -104,6 +114,10 @@ targets:
       - path: ../Unit/Renderer/SceneSharedAssetsInstallerTests.swift
         group: NativeTests
       - path: ../Unit/Export/SceneWallpaperExportTests.swift
+        group: NativeTests
+      - path: ../Unit/Export/OfflineSceneWallpaperExportTests.swift
+        group: NativeTests
+      - path: ../Unit/Export/TendiesProviderExportTests.swift
         group: NativeTests
       - path: ../Support/IOSTestSupport.swift
         group: NativeTests

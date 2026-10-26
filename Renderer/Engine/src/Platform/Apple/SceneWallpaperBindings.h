@@ -49,6 +49,19 @@ int owe_scene_wallpaper_delete(owe_scene_wallpaper* scene);
 int owe_scene_wallpaper_init(owe_scene_wallpaper* scene);
 int owe_scene_wallpaper_shutdown(owe_scene_wallpaper* scene);
 
+/* Dedicated attached export handle: immutable before init(), never auto-ticks.
+ * status: -2 disabled, 0 preparing, 1 graph ready, -1 terminal failure.
+ * request index is exactly 0,1,...17999 at index/fps; at most one in flight.
+ * Accepted requests publish WallpaperMachine.sceneExportFrameReady on the main
+ * queue, object the exact CAMetalLayer, userInfo context/status/index/frameRate,
+ * and on success pixels(NSData), width/height(NSUInteger), bgra(BOOL).
+ * Context is 1..64 ASCII letters/digits/hyphen. Shutdown cancels pending work.
+ */
+int owe_scene_wallpaper_enable_frame_export(owe_scene_wallpaper* scene, uint32_t fps);
+int owe_scene_wallpaper_frame_export_status(owe_scene_wallpaper* scene);
+int owe_scene_wallpaper_request_export_frame(owe_scene_wallpaper* scene, uint32_t index,
+                                            const char* context);
+
 /* The drawing surface: CAMetalLayer and physical output pixel dimensions (not points).
    display_scale_factor relates these pixels to logical points. render_width/height are
    legacy requested render dimensions; use set_render_scale for Metal target quality. */

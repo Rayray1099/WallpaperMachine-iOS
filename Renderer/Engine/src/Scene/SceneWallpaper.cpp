@@ -18,6 +18,8 @@
 #include "Timer/FrameTimer.hpp"
 #include "WPSceneParser.hpp"
 #include "WPShaderParser.hpp"
+#include "WPShaderValueUpdater.hpp"
+#include "Utils/Random.hpp"
 #include "Scene/Scene.h"
 #include "Scene/SceneCamera.h"
 #include "Scene/SceneMaterial.h"
@@ -235,6 +237,10 @@ public:
     /// thread and waits for its verdict. False at once when no render thread is running, and
     /// false when the host shuts down while the command is waiting.
     bool runSurfaceCommand(bool begin, std::shared_ptr<RenderInitInfo> info);
+    bool enableFrameExport(uint32_t fps);
+    int frameExportStatus() const;
+    uint32_t frameExportRate() const;
+    bool requestExportFrame(uint32_t index, SceneFrameExportRequest::Completion completion);
 
 public:
     void onMessageReceived(const std::shared_ptr<looper::Message>& msg) override {
@@ -368,6 +374,7 @@ public:
         CMD_BEGIN_SURFACE_RECONFIGURE,
         CMD_FINISH_SURFACE_RECONFIGURE,
         CMD_POSTER_REQUEST,
+        CMD_EXPORT_FRAME,
 #ifdef WESCENE_BUILD_TESTS
         CMD_INJECT_FRAME_FAILURE,
 #endif
@@ -428,6 +435,7 @@ public:
                 CASE_CMD(BEGIN_SURFACE_RECONFIGURE);
                 CASE_CMD(FINISH_SURFACE_RECONFIGURE);
                 CASE_CMD(POSTER_REQUEST);
+                CASE_CMD(EXPORT_FRAME);
                 CASE_CMD(SET_RENDER_SCALE);
 #ifdef WESCENE_BUILD_TESTS
                 CASE_CMD(INJECT_FRAME_FAILURE);
@@ -634,6 +642,7 @@ public:
         if (m_failure_stage != SceneFailureStage::None) return;
         if (reason.empty()) reason = "the native renderer could not draw this wallpaper";
         m_failure_stage = stage;
+        if (frame_export_enabled) frame_export->fail();
         SceneBackendSelection selection;
         selection.failure_stage  = stage;
         selection.failure_reason = std::move(reason);
@@ -713,7 +722,7 @@ public:
     /// at most one draw in flight, so a burst of property writes produces one
     /// frame, not one frame each. Whether the clock keeps running afterwards is
     /// decided by that frame's own demand, not here.
-    void requestFrame() { frame_timer.RequestFrame(); }
+    void requestFrame() { if (!frame_export_enabled) frame_timer.RequestFrame(); }
 
     /// Lets a scene's own background work ask for a frame without knowing
     /// anything about this handler's lifetime.
@@ -898,7 +907,7 @@ private:
     /// running either way, so control messages and the first-frame draw that
     /// follows a scene still arrive.
     void syncFrameClock() {
-        if (m_clock_requested && ! m_render_blocked && m_scene != nullptr)
+        if (!frame_export_enabled && m_clock_requested && ! m_render_blocked && m_scene != nullptr)
             frame_timer.Run();
         else
             frame_timer.Stop();
@@ -1002,20 +1011,26 @@ private:
 
     /// One frame of the committed scene: input sampled once, the simulation advanced once, graph
     /// changes applied, then the draw. Runs only with a scene, a compiled graph and a renderer.
-    void runFrame() {
+    bool runFrame(std::shared_ptr<SceneFrameExportRequest> export_request = {}) {
         Scene&       scene   = *m_scene;
         auto* const  updater = scene.shaderValueUpdater.get();
         auto* const  runtime = scene.runtime.get();
-        const double step    = frame_timer.IdeaTime() * static_cast<double>(m_speed);
+        const double step = export_request ? export_request->step()
+                                           : frame_timer.IdeaTime() * static_cast<double>(m_speed);
+        if (export_request) {
+            scene.frameTime = step;
+            scene.elapsingTime = export_request->time();
+        }
 
         // The one sample of this frame. The mirror applies after the clamp and before anything
         // stores or delivers the position.
         float px = 0.5f, py = 0.5f;
         UnpackPointer(m_pointer_bits.load(std::memory_order_relaxed), px, py);
         if (m_mirror) px = 1.0f - px;
+        if (export_request) { px = 0.5f; py = 0.5f; }
         scene.pointerPosition = { px, py };
-        const MouseButtonSnapshot buttons   = consumeMouseButtonSnapshot();
-        const bool                in_window = m_cursor_in_window.load();
+        const MouseButtonSnapshot buttons = export_request ? MouseButtonSnapshot {} : consumeMouseButtonSnapshot();
+        const bool in_window = !export_request && m_cursor_in_window.load();
 
         if (updater != nullptr) {
             updater->MouseInput(px, py);
@@ -1048,6 +1063,10 @@ private:
         if (runtime != nullptr) {
             runtime->Tick(step);
             runtime->PumpTextLayerCache();
+            if (export_request && runtime->TextLayoutInFlight()) {
+                if (updater != nullptr) updater->FrameEnd();
+                return false; // Never sample text from a different simulation tick.
+            }
             for (const auto& request : runtime->TakeUserShortcutRequests()) {
                 main_handler.sendUserShortcut(request.first, request.second);
             }
@@ -1067,8 +1086,9 @@ private:
         if (ok) {
             // Never waited for: a program that has a variant, is compiling one or was refused
             // one is not asked again, and this frame draws with what it has.
-            RequestSceneMetalVariants(scene, metal::MetalVideoPlaneSamplingEnabled(),
-                                      m_shader_cache_path);
+            if (!export_request)
+                RequestSceneMetalVariants(scene, metal::MetalVideoPlaneSamplingEnabled(),
+                                          m_shader_cache_path);
             if (m_scene_optimization_applied.load(std::memory_order_relaxed) !=
                 render::SceneOptimizationEnabled()) {
                 if (m_render->ApplySceneOptimization(scene, *m_rg)) {
@@ -1082,25 +1102,25 @@ private:
         if (! ok) {
             failFrame(false);
             if (updater != nullptr) updater->FrameEnd();
-            return;
+            return false;
         }
         // Visibility is final only after the runtime tick, so a skipped rebuild is made up now.
         if (scene.paritileSys != nullptr) scene.paritileSys->RebuildVisibleMeshes();
 
         bool presented = false;
-        if (! m_render->drawFrame(scene, &presented)) {
+        if (! m_render->drawFrame(scene, &presented, export_request)) {
             reportFailure(SceneFailureStage::Frame, m_render->lastError());
             failFrame(true);
             settleFailedScene();
             if (updater != nullptr) updater->FrameEnd();
-            return;
+            return false;
         }
         m_video_path.store(static_cast<uint8_t>(m_render->VideoPath()), std::memory_order_relaxed);
-        scene.PassFrameTime(step);
+        if (!export_request) scene.PassFrameTime(step);
         counters.Add(OWE_RC_SIMULATION_TICKS);
         m_health.NoteFrameCompleted();
         if (updater != nullptr) updater->FrameEnd();
-        if (! presented) return;
+        if (! presented) return !export_request;
         m_health.NotePresented();
         if (! m_layer_has_picture) {
             // The layer has a picture of its own now; the preview has nothing left to cover.
@@ -1111,6 +1131,7 @@ private:
             scene.first_frame_ok = true;
             if (! m_failure_first_frame_sent) main_handler.sendFirstFrameOk();
         }
+        return true;
     }
 
     /// Replays what is playing to a scene that has just been attached.
@@ -1164,6 +1185,7 @@ private:
     }
     MHANDLER_CMD(DRAW) {
         (void)msg;
+        if (frame_export_enabled) return; // Includes the loader's first queued draw.
         if (m_render_blocked) {
             counters.Add(OWE_RC_DRAWS_DROPPED);
             return;
@@ -1238,6 +1260,7 @@ private:
         }
     }
     MHANDLER_CMD(SET_AUDIO_RESPONSE_ENABLED) {
+        if (frame_export_enabled) return;
         bool value = false;
         if (! msg->findBool("value", &value)) return;
         if (m_scene != nullptr && m_scene->runtime != nullptr) {
@@ -1245,6 +1268,7 @@ private:
         }
     }
     MHANDLER_CMD(SET_MEDIA_INTEGRATION_ENABLED) {
+        if (frame_export_enabled) return;
         bool value = false;
         if (! msg->findBool("value", &value)) return;
         m_media_integration = value;
@@ -1266,6 +1290,7 @@ private:
         }
     }
     MHANDLER_CMD(SYSTEM_MEDIA_ARTWORK) {
+        if (frame_export_enabled) return;
         std::shared_ptr<ArtworkPayload> artwork;
         if (! msg->findObject("artwork", &artwork) || artwork == nullptr) return;
         if (auto* images = runtimeImages(); images != nullptr) {
@@ -1337,6 +1362,7 @@ private:
 
     /// Commits a scene the control thread loaded (e6 R20, R-H22).
     MHANDLER_CMD(SET_SCENE) {
+        if (frame_export_enabled && frame_export->status() != 0) { frame_export->fail(); return; }
         std::shared_ptr<Scene> incoming;
         // A null scene is a commit of no scene; a message without the key is not a commit.
         if (! msg->findObject("scene", &incoming)) return;
@@ -1352,6 +1378,33 @@ private:
         // replaces it, and only the failure of the scene it replaces ends here.
         const bool surface_released = m_surface_released;
         m_scene_awaits_surface      = surface_released;
+        if (frame_export_enabled) {
+            // Conservative capability boundary: never silently omit scripts,
+            // asynchronous video, or text whose layout can land on another tick.
+            const bool video = m_scene && std::any_of(m_scene->textures.begin(), m_scene->textures.end(),
+                [](const auto& item) { return item.second.isVideo; });
+            const bool script = m_scene && m_scene->runtime && m_scene->runtime->sceneScriptCount() != 0;
+            const bool text = m_scene && m_scene->runtime &&
+                (m_scene->runtime->DescribeTimeAdvancingWork() & SceneDemandReason::TextLayoutPending);
+            if (video || script || text) {
+                holdFailedScene(SceneFailureStage::Unsupported,
+                    "Offline scene export does not support video textures, scripts, or pending text layout.");
+                return;
+            }
+            if (m_scene) {
+                m_scene->elapsingTime = 0;
+                m_scene->frameTime = 0;
+                if (auto* updater = dynamic_cast<WPShaderValueUpdater*>(m_scene->shaderValueUpdater.get())) {
+                    Scene* scene = m_scene.get();
+                    const auto epoch = export_epoch;
+                    updater->SetWallClock([scene, epoch] {
+                        return epoch + std::chrono::duration_cast<std::chrono::system_clock::duration>(
+                            std::chrono::duration<double>(scene->elapsingTime));
+                    });
+                }
+            }
+            Random::seed(1);
+        }
         if (surface_released) {
             clearFailure();
         } else {
@@ -1373,6 +1426,8 @@ private:
             (void)rebuildRenderGraph();
         }
 
+        if (frame_export_enabled && m_failure_stage == SceneFailureStage::None && m_rg && renderInited())
+            frame_export->ready();
         publishPauseReasons();
         refreshFrameDemand();
     }
@@ -1432,6 +1487,7 @@ private:
     /// building a renderer now would mean tearing it down again the moment the
     /// scene turns out to be refused.
     MHANDLER_CMD(INIT_SURFACE) {
+        if (frame_export_enabled && frame_export->status() != 0) { frame_export->fail(); return; }
         std::shared_ptr<RenderInitInfo> info;
         if (! msg->findObject("info", &info) || info == nullptr) return;
         adoptRenderInitInfo(std::move(info));
@@ -1453,6 +1509,7 @@ private:
     /// post-command `requestFrame()` already asks for, and that request is
     /// dropped while the clock is stopped.
     MHANDLER_CMD(POSTER_REQUEST) {
+        if (frame_export_enabled) return;
         // Nothing to service yet, or nothing valid to read back: the request
         // stays pending in the host's mailbox and the first drawn frame polls
         // it. `m_render_blocked` covers a surface mid-reconfigure; a wallpaper
@@ -1471,6 +1528,21 @@ private:
             break;
         }
     }
+    MHANDLER_CMD(EXPORT_FRAME) {
+        std::shared_ptr<SceneFrameExportRequest> request;
+        if (!msg->findObject("export_request", &request) || !request) return;
+        if (frame_export->status() != 1 || m_render_blocked || !m_scene || !m_rg || !renderInited()) {
+            request->finish(-1);
+            return;
+        }
+        // No FrameTimer boundary here: processing/JPEG/readback duration never
+        // changes the fixed simulation time. Ordinary queued draws are ignored.
+        try {
+            if (!runFrame(request)) request->finish(-1);
+        } catch (...) {
+            request->finish(-1);
+        }
+    }
 #ifdef WESCENE_BUILD_TESTS
     /// What a draw that fails after the scene has drawn does, without needing
     /// the GPU to fail.
@@ -1482,6 +1554,7 @@ private:
     /// A host-initiated stop: no stop reason, no failure counted, nobody called back.
     MHANDLER_CMD(BEGIN_SURFACE_RECONFIGURE) {
         TicketGuard ticket(msg);
+        if (frame_export_enabled && frame_export->status() != 0) { frame_export->fail(); return; }
         m_surface_released = true;
         suspendRendering();
         // Nothing the preview picture holds may refer to the layer that is about to go.
@@ -1493,6 +1566,7 @@ private:
     }
     MHANDLER_CMD(FINISH_SURFACE_RECONFIGURE) {
         TicketGuard ticket(msg);
+        if (frame_export_enabled && frame_export->status() != 0) { frame_export->fail(); return; }
         std::shared_ptr<RenderInitInfo> info;
         if (! msg->findObject("info", &info) || info == nullptr) return;
         adoptRenderInitInfo(std::move(info));
@@ -1561,6 +1635,9 @@ private:
     }
 
 public:
+    std::shared_ptr<SceneFrameExportState> frame_export { std::make_shared<SceneFrameExportState>() };
+    bool frame_export_enabled { false }; // Immutable before either looper starts.
+    const std::chrono::system_clock::time_point export_epoch { std::chrono::system_clock::now() };
     FrameTimer       frame_timer;
     /// Whether the host wants this surface playing. The clock runs only while
     /// this holds and a scene is loaded; see `syncFrameClock`. Render thread.
@@ -1788,6 +1865,12 @@ SceneWallpaper::~SceneWallpaper() { shutdown(); }
 bool SceneWallpaper::inited() const { return m_main_handler->inited(); }
 
 bool SceneWallpaper::init() { return m_main_handler->init(); }
+bool SceneWallpaper::enableFrameExport(uint32_t fps) { return m_main_handler->enableFrameExport(fps); }
+int SceneWallpaper::frameExportStatus() const { return m_main_handler->frameExportStatus(); }
+uint32_t SceneWallpaper::frameExportRate() const { return m_main_handler->frameExportRate(); }
+bool SceneWallpaper::requestExportFrame(uint32_t index, SceneFrameExportRequest::Completion completion) {
+    return m_main_handler->requestExportFrame(index, std::move(completion));
+}
 
 void SceneWallpaper::setLogScope(uint64_t scope) { m_main_handler->setLogScope(scope); }
 
@@ -1845,6 +1928,11 @@ bool SceneWallpaperInputTestAccess::SurfaceHandedOver(SceneWallpaper& wallpaper)
 #endif
 
 void SceneWallpaper::initSurface(const RenderInitInfo& info) {
+    const auto handler = m_main_handler->renderHandler();
+    if (handler->frame_export_enabled && handler->frame_export->status() != 0) {
+        handler->frame_export->fail();
+        return;
+    }
     auto msg = CreateMsgWithCmd(m_main_handler->renderHandler(),
                                 RenderHandler::CMD::CMD_INIT_SURFACE);
     msg->setObject("info", std::make_shared<RenderInitInfo>(info));
@@ -2033,6 +2121,12 @@ void PostToRender(const std::shared_ptr<RenderHandler>& render, RenderHandler::C
 MHANDLER_CMD_IMPL(MainHandler, SET_PROPERTY) {
     std::string name;
     if (! msg->findString("property", &name)) return;
+    if (m_render_handler->frame_export_enabled && m_render_handler->frame_export->status() != 0) {
+        // Every post-prepare property mutation is forbidden, including reset,
+        // framing, flip and scaling factor. A new session owns new settings.
+        m_render_handler->frame_export->fail();
+        return;
+    }
     using CMD = RenderHandler::CMD;
 
     std::string text;
@@ -2208,6 +2302,13 @@ MHANDLER_CMD_IMPL(MainHandler, RENDER_FAILED) {
 
 bool MainHandler::applyConfig(SceneWallpaperConfig config) {
     if (config.source.empty() || config.fps == 0) return false;
+    if (m_render_handler->frame_export_enabled) {
+        if (!m_source.empty()) { m_render_handler->frame_export->fail(); return false; }
+        config.fps = m_render_handler->frame_export->fps();
+        config.paused = true;
+        config.volume = 0;
+        config.muted = true;
+    }
     const std::string saved = config.has_project_property_override
                                   ? std::move(config.project_property_override_json)
                                   : std::string {};
@@ -2357,6 +2458,7 @@ void MainHandler::loadScene() {
 
     // The previous scene's sounds are released only now that a parse is certain to start.
     m_sound_manager->UnMountAll();
+    if (m_render_handler->frame_export_enabled) Random::seed(1);
     WPSceneParser parser;
     auto          scene = parser.Parse(request, scene_text, *vfs, *m_sound_manager);
     if (scene == nullptr) {
@@ -2366,8 +2468,8 @@ void MainHandler::loadScene() {
     }
     scene->project_path = m_source;
     if (scene->runtime != nullptr) {
-        scene->runtime->SetAudioResponseEnabled(m_audio_response_enabled);
-        scene->runtime->SetMediaIntegrationEnabled(m_media_integration_enabled);
+        scene->runtime->SetAudioResponseEnabled(!m_render_handler->frame_export_enabled && m_audio_response_enabled);
+        scene->runtime->SetMediaIntegrationEnabled(!m_render_handler->frame_export_enabled && m_media_integration_enabled);
     }
     // The file space now lives exactly as long as the scene that reads from it.
     scene->vfs = std::move(vfs);
@@ -2463,7 +2565,34 @@ bool MainHandler::init() {
     return true;
 }
 
+bool MainHandler::enableFrameExport(uint32_t fps) {
+    if (inited() || !m_render_handler->frame_export->enable(fps)) return false;
+    m_render_handler->frame_export_enabled = true;
+    // Export configuration can never open an audio device, even while parsing
+    // an authored sound layer before the host applies later mute settings.
+    m_sound_manager = std::make_unique<audio::SoundManager>(audio::SoundManager::OutputBackend::Null);
+    m_sound_manager->SetMuted(true);
+    m_sound_manager->SetVolume(0);
+    m_sound_manager->Pause();
+    return true;
+}
+int MainHandler::frameExportStatus() const { return m_render_handler->frame_export->status(); }
+uint32_t MainHandler::frameExportRate() const { return m_render_handler->frame_export->fps(); }
+bool MainHandler::requestExportFrame(uint32_t index, SceneFrameExportRequest::Completion completion) {
+    if (!inited()) return false;
+    auto request = m_render_handler->frame_export->request(index, std::move(completion));
+    if (!request) return false;
+    auto msg = CreateMsgWithCmd(m_render_handler, RenderHandler::CMD::CMD_EXPORT_FRAME);
+    msg->setObject("export_request", request);
+    if (msg->post() != looper::status_t::OK) request->finish(-1);
+    return true; // Once admitted, failure is delivered by this request's callback.
+}
+
 bool MainHandler::runSurfaceCommand(bool begin, std::shared_ptr<RenderInitInfo> info) {
+    if (m_render_handler->frame_export_enabled && m_render_handler->frame_export->status() != 0) {
+        m_render_handler->frame_export->fail();
+        return false;
+    }
     // A surface description that did not arrive is a failure before anything is posted.
     if (! begin && info == nullptr) return false;
     auto ticket = std::make_shared<SurfaceTicket>();
@@ -2485,6 +2614,7 @@ bool MainHandler::runSurfaceCommand(bool begin, std::shared_ptr<RenderInitInfo> 
 }
 
 void MainHandler::shutdown() {
+    if (m_render_handler->frame_export_enabled) m_render_handler->frame_export->fail();
     {
         std::scoped_lock lock(m_ticket_mutex);
         if (! m_inited.load()) return;

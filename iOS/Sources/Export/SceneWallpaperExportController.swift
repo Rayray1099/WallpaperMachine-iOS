@@ -41,7 +41,7 @@ final class SceneWallpaperExportController {
     func makeCanvas() -> SceneExportCanvas {
         let settings = captureSettings
         appliedSettings = settings
-        let canvas = SceneExportCanvas(surface: SceneMetalSurface(url: url, settings: settings, properties: properties),
+        let canvas = SceneExportCanvas(surface: SceneMetalSurface(url: url, settings: settings, properties: properties, exportFrameRate: settings.framesPerSecond),
                                        outputSize: outputSize)
         self.canvas = canvas
         return canvas
@@ -70,12 +70,15 @@ final class SceneWallpaperExportController {
         }
     }
 
-    func prepare(outputSize: CGSize, frameRate: Int) async throws -> WallpaperFrameProvider {
+    func prepare(outputSize: CGSize, frameRate: Int, frameCount: Int) async throws -> WallpaperFrameProvider {
         try Task.checkCancellation()
         guard lease == nil else { throw SceneFrameCaptureError.busy }
         guard SceneCaptureLimits.native.validatedSize(outputSize) == outputSize else { throw SceneFrameCaptureError.invalidSize }
         guard (1...SceneCaptureLimits.maximumFrameRate).contains(frameRate) else {
             throw WallpaperExportValidationError.invalidFrameRate(frameRate)
+        }
+        guard (1...(OfflineSceneFrameCapture.maximumFrameIndex + 1)).contains(frameCount) else {
+            throw OfflineSceneCaptureError.invalidSequence
         }
         let coordinator = SceneSharedAssetsCoordinator.shared
         let token = try coordinator.beginExport()
@@ -85,7 +88,16 @@ final class SceneWallpaperExportController {
         self.outputSize = outputSize
         exportFrameRate = frameRate
         do {
-            if let canvas { update(canvas); canvas.layoutNativeSurface() }
+            if let canvas {
+                // Every export starts a fresh native manual-clock session,
+                // including repeated exports or a changed immutable frame rate.
+                let settings = captureSettings
+                appliedSettings = settings
+                canvas.replaceSurface(SceneMetalSurface(url: url, settings: settings, properties: properties,
+                                                         exportFrameRate: frameRate))
+                canvas.outputSize = outputSize
+                canvas.layoutNativeSurface()
+            }
             let deadline = ProcessInfo.processInfo.systemUptime + 10
             while ProcessInfo.processInfo.systemUptime < deadline {
                 try Task.checkCancellation()
@@ -95,10 +107,10 @@ final class SceneWallpaperExportController {
                     if let failure = canvas.surface.frameCaptureFailure {
                         throw WallpaperFrameProviderError.unavailable(failure)
                     }
-                    if canvas.window != nil, canvas.surface.isFrameCaptureReady,
+                    if canvas.window != nil, canvas.surface.isOfflineFrameCaptureReady,
                        canvas.surface.nativeCapturePixelSize == outputSize {
                         let provider = SceneLeasedExportProvider(
-                            base: SceneWallpaperExportProvider(source: canvas.surface, outputSize: outputSize),
+                            base: OfflineSceneWallpaperExportProvider(source: canvas.surface, outputSize: outputSize, frameRate: frameRate),
                             release: { [weak self] in
                                 coordinator.endExport(token: token)
                                 self?.releaseLease(token: token)
@@ -111,6 +123,7 @@ final class SceneWallpaperExportController {
             }
             throw WallpaperFrameProviderError.unavailable(NSLocalizedString("scene.capture.loadTimeout", comment: ""))
         } catch {
+            if lease == token { canvas?.surface.finishOfflineCapture() }
             releaseLease(token: token)
             throw error
         }
@@ -121,7 +134,10 @@ final class SceneWallpaperExportController {
         let token = lease
         let provider = currentProvider
         await provider?.finishExport()
-        if let token { releaseLease(token: token) }
+        if let token, lease == token {
+            canvas?.surface.finishOfflineCapture()
+            releaseLease(token: token)
+        }
     }
 
     private func releaseLease(token: UUID? = nil) {
@@ -138,7 +154,7 @@ final class SceneWallpaperExportController {
 /// the layer's drawable or asks the renderer to invent pixels by upscaling.
 @MainActor
 final class SceneExportCanvas: UIView {
-    let surface: SceneMetalSurface
+    private(set) var surface: SceneMetalSurface
     var outputSize: CGSize { didSet { if outputSize != oldValue { setNeedsLayout() } } }
 
     init(surface: SceneMetalSurface, outputSize: CGSize) {
@@ -150,6 +166,14 @@ final class SceneExportCanvas: UIView {
         addSubview(surface)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    func replaceSurface(_ surface: SceneMetalSurface) {
+        self.surface.retire()
+        self.surface.removeFromSuperview()
+        self.surface = surface
+        addSubview(surface)
+        setNeedsLayout()
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -186,11 +210,11 @@ struct SceneWallpaperExportPreview: UIViewRepresentable {
 /// failed prepare also releases it: the service does not finish failed prepares.
 @MainActor
 private final class SceneLeasedExportProvider: WallpaperFrameProvider {
-    private let base: SceneWallpaperExportProvider
+    private let base: OfflineSceneWallpaperExportProvider
     private var release: (() -> Void)?
     private var finished = false
 
-    init(base: SceneWallpaperExportProvider, release: @escaping () -> Void) {
+    init(base: OfflineSceneWallpaperExportProvider, release: @escaping () -> Void) {
         self.base = base
         self.release = release
     }

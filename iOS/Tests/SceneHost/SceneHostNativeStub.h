@@ -35,6 +35,7 @@ typedef struct wm_scene_test_event {
     double display_scale_factor;
     double render_scale;
     uint32_t fps;
+    uint32_t frame_index; /* Requested simulation index; no frame is generated. */
     float volume;
     bool muted;
     bool paused;
@@ -68,7 +69,8 @@ size_t wm_scene_test_live_handle_count(void);
  * Operation names: new, init, init_metal, begin, finish, apply_config,
  * render_scale, fps, volume, muted, set_property_int32, set_property_bool,
  * set_property_string, pause, backend_reason, health, shutdown, delete,
- * mouse_enter, mouse_input, mouse_button.
+ * mouse_enter, mouse_input, mouse_button, enable_frame_export,
+ * frame_export_status, request_export_frame.
  */
 void wm_scene_test_fail_next(const char* operation, const char* error);
 /* Makes successful new return a null handle without allocating one. */
@@ -79,6 +81,10 @@ void wm_scene_test_set_health(uint64_t frames_completed, uint64_t frames_present
                               uint64_t failed_frames, uint64_t last_present_age_ms,
                               uint32_t stop_reason);
 void wm_scene_test_set_backend_reason(const char* reason);
+/* Separate preparation control, never derived from health/frame counters. Applies
+ * to every enabled live handle. 0 loading, 1 ready, -1 failed; not enabled is -2.
+ * The recorder never posts a frame notification or advances simulation. */
+void wm_scene_test_set_export_status(int status);
 
 /*
  * Invoked synchronously after appending the fully populated event and updating

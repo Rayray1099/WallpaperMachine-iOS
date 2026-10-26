@@ -51,7 +51,7 @@ public struct WallpaperExportView: View {
                 Section {
                     Text(verbatim: item.title).font(.headline)
                     if item.kind == .web { Text(NSLocalizedString("export.web.liveNote", comment: "")).font(.footnote).foregroundStyle(.secondary) }
-                    if item.kind == .scene { Text(NSLocalizedString("export.scene.liveNote", comment: "")).font(.footnote).foregroundStyle(.secondary) }
+                    if item.kind == .scene { Text(NSLocalizedString("export.scene.offlineNote", comment: "")).font(.footnote).foregroundStyle(.secondary) }
                     if renderingUnavailable {
                         Label(l("Real frame capture is not connected for this wallpaper. Export is unavailable; its preview image will not be substituted.",
                                 "此桌布尚未連接實際畫面擷取。無法匯出，且不會以預覽圖片冒充動畫。"), systemImage: "exclamationmark.triangle")
@@ -194,8 +194,10 @@ public struct WallpaperExportView: View {
                 if item.kind == .scene, provider == nil {
                     guard let sceneController else { throw SceneFrameCaptureError.notReady }
                     let requested = selected.resolution.pixelSize(devicePixelSize: ExportDevice.screenPixelSize)
+                    let timeline = ExportTimeline(frameRate: selected.frameRate, duration: selected.duration)
                     provider = try await sceneController.prepare(
-                        outputSize: CGSize(width: requested.width, height: requested.height), frameRate: selected.frameRate)
+                        outputSize: CGSize(width: requested.width, height: requested.height), frameRate: selected.frameRate,
+                        frameCount: timeline.frameCount)
                 }
                 let exported = try await WallpaperExportService().export(item: item, sourceURL: sourceURL, settings: selected,
                     frameProvider: provider, progress: { value in

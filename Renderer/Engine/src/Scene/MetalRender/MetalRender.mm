@@ -5009,7 +5009,8 @@ WallpaperCursorMapping MetalRender::CursorMapping(const Scene& scene) const
 
 const std::string& MetalRender::lastError() const { return pImpl->last_error; }
 
-bool MetalRender::drawFrame(Scene& scene, bool* presented)
+bool MetalRender::drawFrame(Scene& scene, bool* presented,
+                            std::shared_ptr<SceneFrameExportRequest> export_request)
 {
     if (presented != nullptr) *presented = false;
     if (! pImpl->inited || ! pImpl->graph_ready || pImpl->layer == nil) return false;
@@ -5638,7 +5639,7 @@ bool MetalRender::drawFrame(Scene& scene, bool* presented)
                                      impl.frame_encodes.blit_passes == 0 &&
                                      impl.frame_swaps.empty() && impl.pooled_moves == 0 &&
                                      impl.video.empty() && impl.pending_target_clears.empty();
-        if (render::SceneOptimizationEnabled() && nothing_encoded &&
+        if (!export_request && render::SceneOptimizationEnabled() && nothing_encoded &&
             impl.present_gate.Matches(impl.present_key, {})) {
             // The buffer holds nothing and is dropped uncommitted, so the slot
             // is released here and the uniform ring does not advance: the next
@@ -5651,6 +5652,10 @@ bool MetalRender::drawFrame(Scene& scene, bool* presented)
         }
 
         id<CAMetalDrawable> drawable = [impl.layer nextDrawable];
+        if (drawable == nil && export_request) {
+            dispatch_semaphore_signal(impl.inflight);
+            return impl.fail("the export surface has no drawable");
+        }
         if (drawable == nil) {
             // The layer has no drawable to give right now. The passes already
             // encoded still run, so the targets and the reuse plan agree, but
@@ -5674,12 +5679,44 @@ bool MetalRender::drawFrame(Scene& scene, bool* presented)
         // reads the drawable, holds one, or makes the layer readable. A capture
         // that fails is not a failed frame: the wallpaper is already drawn, and
         // the capture keeps its own diagnostic for the next service call.
-        impl.poster.encodeIfRequested(
-            command, (uint32_t)drawable.texture.width, (uint32_t)drawable.texture.height,
-            drawable.texture.pixelFormat,
-            [&impl, &scene](id<MTLCommandBuffer> poster_command, id<MTLTexture> destination) {
-                return impl.encodeComposition(poster_command, destination, scene);
-            });
+        if (export_request) {
+            // A separate per-command capture has no mailbox/coalescing/initial
+            // poster demand. Its completion identity cannot be changed by a later
+            // request, and its owned pixels are from THESE scene passes.
+            auto capture = std::make_shared<MetalPosterCapture>();
+            capture->configure(impl.device, [] { return true; },
+                [export_request](std::span<const uint8_t> pixels, uint32_t width,
+                                 uint32_t height, bool bgra) {
+                    export_request->finish(0, pixels, width, height, bgra);
+                });
+            const auto outcome = capture->encodeIfRequested(
+                command, (uint32_t)drawable.texture.width, (uint32_t)drawable.texture.height,
+                drawable.texture.pixelFormat,
+                [&impl, &scene](id<MTLCommandBuffer> buffer, id<MTLTexture> destination) {
+                    return impl.encodeComposition(buffer, destination, scene);
+                });
+            if (outcome != MetalPosterCapture::Outcome::Encoded) {
+                dispatch_semaphore_signal(impl.inflight);
+                return impl.fail("the export composition could not be captured");
+            }
+            [command addCompletedHandler:^(id<MTLCommandBuffer> completed) {
+                // Keep the capture alive through its own completion block. Metal
+                // invokes completion handlers in registration order; report any
+                // missing/failed readback once, never leave a successful await.
+                (void)capture;
+                if (completed.status != MTLCommandBufferStatusCompleted ||
+                    !export_request->completed.load(std::memory_order_acquire)) {
+                    export_request->finish(-1);
+                }
+            }];
+        } else {
+            impl.poster.encodeIfRequested(
+                command, (uint32_t)drawable.texture.width, (uint32_t)drawable.texture.height,
+                drawable.texture.pixelFormat,
+                [&impl, &scene](id<MTLCommandBuffer> poster_command, id<MTLTexture> destination) {
+                    return impl.encodeComposition(poster_command, destination, scene);
+                });
+        }
 
         dispatch_semaphore_t semaphore = impl.inflight;
         [command addCompletedHandler:^(id<MTLCommandBuffer>) {

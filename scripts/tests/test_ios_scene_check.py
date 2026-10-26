@@ -15,21 +15,22 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parents[1] / "ios" / "check_scene_startup.sh"
 
 
-def load_report_parser():
+def load_report_parser(name="inspect_tests"):
     source = SCRIPT.read_text(encoding="utf-8")
     python = source.split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
     parsed = ast.parse(python, filename=str(SCRIPT))
     functions = [node for node in parsed.body
-                 if isinstance(node, ast.FunctionDef) and node.name == "inspect_tests"]
+                 if isinstance(node, ast.FunctionDef) and node.name == name]
     if len(functions) != 1:
-        raise AssertionError("expected one actual inspect_tests parser")
+        raise AssertionError("expected one actual " + name + " parser")
     namespace = {"json": json}
     module = ast.Module(body=functions, type_ignores=[])
     exec(compile(module, str(SCRIPT), "exec"), namespace)
-    return namespace["inspect_tests"]
+    return namespace[name]
 
 
 inspect_tests = load_report_parser()
+inspect_contract = load_report_parser("inspect_contract")
 
 
 def passed(name="Passed"):
@@ -97,6 +98,39 @@ class IOSSceneCheckReportTests(unittest.TestCase):
     def test_missing_fixture_gpu_skip_is_failure_not_optional_coverage(self):
         with self.assertRaisesRegex(ValueError, "unexpected skip"):
             self.inspect([skipped("set WM_NATIVE_SCENE_FIXTURE to the generated packed project directory")], gpu=True)
+
+    def test_duplicate_test_identity_is_not_two_executed_cases(self):
+        with self.assertRaisesRegex(ValueError, "duplicate test identities"):
+            self.inspect([passed("One"), passed("One")])
+
+    def test_manual_gpu_requires_exact_named_case_not_unrelated_green_report(self):
+        expected = {"MetalSceneDraw.ManualExportUsesFixedSimulationTimeDespiteSlowConsumer"}
+        method = "ManualExportUsesFixedSimulationTimeDespiteSlowConsumer"
+        for suite, methods in (("Other", [method]), ("MetalSceneDraw", ["Unrelated"]),
+                               ("MetalSceneDraw", [method, "Unrelated"])):
+            with self.subTest(suite=suite, methods=methods):
+                self.report.write_text(json.dumps({"testsuites": [
+                    {"name": suite, "testsuite": [passed(name) for name in methods]}]}), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "exactly the required test identities"):
+                    inspect_tests(self.report, True, expected_names=expected)
+        self.report.write_text(json.dumps({"testsuites": [
+            {"name": "MetalSceneDraw", "testsuite": [passed(method)]}]}), encoding="utf-8")
+        result = inspect_tests(self.report, True, expected_names=expected)
+        self.assertEqual((result["passed"], result["skipped"]), (1, 0))
+
+    def test_contract_requires_exact_current_release_completion_verdict(self):
+        expected = "Scene frame export contract: 18000 sequential frames, admission/cancel/exactly-once PASS"
+        for contents in (expected + "\n", "$ /owned/path/scene_frame_export_contract_test\n" + expected + "\n"):
+            self.report.write_text(contents, encoding="utf-8")
+            result = inspect_contract(self.report)
+            self.assertEqual((result["tests"], result["passed"], result["skipped"]), (1, 1, 0))
+            self.assertFalse(result["gpu_required"])
+        for contents in ("", "PASS", expected.replace("18000", "480"), expected + "\n" + expected,
+                         expected + "\nERROR later failure", "$ /owned/path/scene_frame_export_contract_test\n"):
+            with self.subTest(contents=contents):
+                self.report.write_text(contents, encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "exactly its current completion verdict"):
+                    inspect_contract(self.report)
 
     def test_failed_case_wins_over_skip_marker_and_zero_failure_summary(self):
         failed = {**skipped(), "failures": [{"failure": "a rendered pixel differed"}]}

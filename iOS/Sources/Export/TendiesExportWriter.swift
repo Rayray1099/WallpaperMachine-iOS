@@ -72,17 +72,22 @@ public final class TendiesExportWriter {
         guard frameIndex >= 0, frameIndex < descriptor.frameCount else {
             throw TendiesExportError.frameIndexOutOfRange(frameIndex, descriptor.frameCount)
         }
-        let rendered = try compositor.cgImage(for: image)
-        guard let jpeg = UIImage(cgImage: rendered).jpegData(compressionQuality: quality) else {
-            throw TendiesExportError.jpegEncodingFailed
+        // Drain this frame's synchronous Core Image/UIKit/JPEG temporaries even
+        // when an offline export encodes many frames without a run-loop drain.
+        // The input CIImage remains caller-owned; no await crosses this pool.
+        try autoreleasepool {
+            let rendered = try compositor.cgImage(for: image)
+            guard let jpeg = UIImage(cgImage: rendered).jpegData(compressionQuality: quality) else {
+                throw TendiesExportError.jpegEncodingFailed
+            }
+            do {
+                try archive.addFile(path: descriptor.frameMemberPath(at: frameIndex), data: jpeg)
+            } catch let error as ZipArchiveWriter.ZipError {
+                throw TendiesExportError.archiveFailed(error.description)
+            }
+            writtenFrames += 1
+            writtenFrameBytes += Int64(jpeg.count)
         }
-        do {
-            try archive.addFile(path: descriptor.frameMemberPath(at: frameIndex), data: jpeg)
-        } catch let error as ZipArchiveWriter.ZipError {
-            throw TendiesExportError.archiveFailed(error.description)
-        }
-        writtenFrames += 1
-        writtenFrameBytes += Int64(jpeg.count)
     }
 
     public func finish() throws -> URL {

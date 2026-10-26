@@ -48,6 +48,10 @@ EXPECTED_TEST_METHODS = frozenset({
     "testStaleInstallationTokenCannotReleaseAnotherPublicationGate",
     "testDismantledAndExplicitlyStoppedSurfacesNeverReviveAfterAssetsChange",
     "testSceneExportLeaseAndAssetPublicationAreMutuallyExclusive",
+    "testManualExportModeEnabledBeforeInitAndWaitsForPreparedStatusWithoutPresentedFrame",
+    "testManualExportEnableFailureStopsBeforeInitAndCleansAllocatedHandle",
+    "testManualExportFinishClosesOnceAndLiveSessionsNeverUseManualABI",
+    "testPreparedManualSessionIgnoresIdenticalUpdatesButEndsOnChangedSettings",
 })
 MINIMUM_TESTS = len(EXPECTED_TEST_METHODS)
 OWNER_PREFIX = "WMSceneHostHarness-"

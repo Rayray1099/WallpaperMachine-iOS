@@ -11,6 +11,10 @@
 struct owe_scene_wallpaper {
     uint64_t serial;
     bool live;
+    bool initialized;
+    bool export_enabled;
+    uint32_t export_fps;
+    uint32_t next_export_index;
     struct owe_scene_wallpaper* next;
 };
 
@@ -27,6 +31,7 @@ static event_node* first_event;
 static event_node* last_event;
 static size_t event_count;
 static bool return_null_handle;
+static int simulated_export_status;
 static char failure_operation[128];
 static char failure_message[2048];
 static char backend_reason[2048];
@@ -136,6 +141,7 @@ bool wm_scene_test_reset(void)
     event_count = 0;
     invalid_handle_calls = 0;
     return_null_handle = false;
+    simulated_export_status = 0;
     failure_operation[0] = '\0';
     failure_message[0] = '\0';
     backend_reason[0] = '\0';
@@ -167,6 +173,7 @@ void wm_scene_test_fail_next(const char* operation, const char* error)
 }
 
 void wm_scene_test_return_null_handle(bool enabled) { return_null_handle = enabled; }
+void wm_scene_test_set_export_status(int status) { simulated_export_status = status; }
 
 void wm_scene_test_set_health(uint64_t frames_completed, uint64_t frames_presented,
                               uint64_t failed_frames, uint64_t last_present_age_ms,
@@ -227,12 +234,62 @@ int owe_scene_wallpaper_delete(owe_scene_wallpaper* scene)
 
 int owe_scene_wallpaper_init(owe_scene_wallpaper* scene)
 {
-    return complete(start_call("init", scene, false));
+    wm_scene_test_event* event = start_call("init", scene, false);
+    if (event->result == 0) registered_handle(scene)->initialized = true;
+    return complete(event);
+}
+
+int owe_scene_wallpaper_enable_frame_export(owe_scene_wallpaper* scene, uint32_t fps)
+{
+    wm_scene_test_event* event = start_call("enable_frame_export", scene, false);
+    event->fps = fps;
+    if (event->result == 0) {
+        owe_scene_wallpaper* handle = registered_handle(scene);
+        if (handle->initialized || handle->export_enabled || fps < 1 || fps > 120) {
+            fail_event(event, "manual frame export must be enabled once before init with bounded FPS");
+        } else {
+            handle->export_enabled = true;
+            handle->export_fps = fps;
+        }
+    }
+    return complete(event);
+}
+
+int owe_scene_wallpaper_frame_export_status(owe_scene_wallpaper* scene)
+{
+    wm_scene_test_event* event = start_call("frame_export_status", scene, false);
+    if (event->result != 0) event->result = -1;
+    else {
+        owe_scene_wallpaper* handle = registered_handle(scene);
+        event->result = handle->export_enabled && handle->initialized ? simulated_export_status : -2;
+    }
+    return complete(event);
+}
+
+int owe_scene_wallpaper_request_export_frame(owe_scene_wallpaper* scene, uint32_t index, const char* context)
+{
+    wm_scene_test_event* event = start_call("request_export_frame", scene, false);
+    event->frame_index = index;
+    event->string_value = copy_string(context);
+    if (event->result == 0) {
+        owe_scene_wallpaper* handle = registered_handle(scene);
+        if (!handle->export_enabled || !handle->initialized || simulated_export_status != 1
+            || index != handle->next_export_index || !context || !context[0]) {
+            fail_event(event, "invalid or unready manual frame request");
+        } else {
+            ++handle->next_export_index;
+            event->fps = handle->export_fps;
+            /* Acceptance only. No GPU, notification, fake pixels or clock work. */
+        }
+    }
+    return complete(event);
 }
 
 int owe_scene_wallpaper_shutdown(owe_scene_wallpaper* scene)
 {
-    return complete(start_call("shutdown", scene, true));
+    wm_scene_test_event* event = start_call("shutdown", scene, true);
+    if (event->result == 0 && scene) registered_handle(scene)->initialized = false;
+    return complete(event);
 }
 
 static int record_surface(const char* operation, owe_scene_wallpaper* scene, void* metal_layer,

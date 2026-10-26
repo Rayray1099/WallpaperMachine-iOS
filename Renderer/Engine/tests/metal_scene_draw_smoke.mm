@@ -40,6 +40,8 @@
 #include "SpriteAnimation.hpp"
 #include "video_orientation_cases.hpp"
 #include "Scene/SceneRendererHandle.hpp"
+#include "Scene/SceneWallpaper.hpp"
+#include "Scene/SceneWallpaperSurface.hpp"
 #include "SpecTexs.hpp"
 #include "WPShaderValueUpdater.hpp"
 #include "RenderGraph/RenderGraph.hpp"
@@ -679,6 +681,94 @@ protected:
 
     std::filesystem::path root_;
 };
+
+TEST_F(MetalSceneDraw, ManualExportUsesFixedSimulationTimeDespiteSlowConsumer)
+{
+    const auto project = WriteFixture(root_ / "manual-export");
+    std::ofstream(project.parent_path() / "shaders/metal_probe.frag")
+        << "uniform float g_Time;\nuniform float g_Frametime;\n"
+           "void main() { gl_FragColor = vec4(g_Time, g_Frametime * 10.0, 0.25, 1.0); }\n";
+    const auto capture = [&](bool slow) {
+        std::vector<std::vector<uint8_t>> result;
+        @autoreleasepool {
+            CAMetalLayer* layer = [CAMetalLayer layer];
+            layer.device = MTLCreateSystemDefaultDevice();
+            layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+            layer.frame = CGRectMake(0, 0, 96, 64);
+            layer.drawableSize = CGSizeMake(96, 64);
+            SceneWallpaper wallpaper;
+            EXPECT_TRUE(wallpaper.enableFrameExport(60));
+            EXPECT_TRUE(wallpaper.init());
+            RenderInitInfo surface;
+            surface.metal_layer = (__bridge void*)layer;
+            surface.width = surface.render_width = 96;
+            surface.height = surface.render_height = 64;
+            wallpaper.initSurface(surface);
+            SceneWallpaperConfig config;
+            config.source = project.string();
+            config.assets = project.parent_path().string();
+            config.fps = 60;
+            config.paused = false; // Export mode must override this live setting.
+            wallpaper.applyConfig(config);
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+            while (wallpaper.frameExportStatus() == 0 && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            EXPECT_EQ(wallpaper.frameExportStatus(), 1);
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            EXPECT_EQ(wallpaper.surfaceHealth().frames_completed, 0u);
+            EXPECT_EQ(SceneWallpaperInputTestAccess::SoundOutputStarts(wallpaper), 0u);
+            for (uint32_t index = 0; index < 8 && wallpaper.frameExportStatus() == 1; ++index) {
+                struct Result {
+                    std::mutex lock;
+                    std::condition_variable ready;
+                    bool done = false;
+                    int status = -9;
+                    uint32_t width = 0, height = 0;
+                    bool bgra = false;
+                    std::vector<uint8_t> bytes;
+                };
+                auto output = std::make_shared<Result>();
+                const bool accepted = wallpaper.requestExportFrame(index,
+                    [output](int code, std::span<const uint8_t> pixels, uint32_t w, uint32_t h, bool bgra) {
+                        std::lock_guard guard(output->lock);
+                        output->status = code;
+                        output->width = w; output->height = h; output->bgra = bgra;
+                        output->bytes.assign(pixels.begin(), pixels.end());
+                        output->done = true;
+                        output->ready.notify_one();
+                    });
+                EXPECT_TRUE(accepted);
+                if (!accepted) break;
+                std::unique_lock guard(output->lock);
+                const bool arrived = output->ready.wait_for(guard, std::chrono::seconds(10), [&] { return output->done; });
+                EXPECT_TRUE(arrived);
+                if (!arrived) break; // Callback owns its result even after timeout.
+                EXPECT_EQ(output->status, 0);
+                EXPECT_EQ(output->width, 96u); EXPECT_EQ(output->height, 64u); EXPECT_TRUE(output->bgra);
+                auto bytes = output->bytes;
+                guard.unlock();
+                if (output->status != 0 || bytes.size() != 96u * 64u * 4u) break;
+                const std::size_t center = (32u * 96u + 48u) * 4u;
+                EXPECT_NEAR(bytes[center + 2], 255.0 * index / 60.0, 2.0);
+                EXPECT_NEAR(bytes[center + 1], index == 0 ? 0.0 : 255.0 / 6.0, 2.0);
+                result.push_back(std::move(bytes));
+                EXPECT_FALSE(wallpaper.requestExportFrame(index, {}));
+                if (slow) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                    EXPECT_EQ(wallpaper.surfaceHealth().frames_completed, index + 1u);
+                }
+            }
+            wallpaper.shutdown();
+        }
+        return result;
+    };
+    const auto fast = capture(false);
+    const auto slow = capture(true);
+    ASSERT_EQ(fast.size(), 8u);
+    ASSERT_EQ(slow.size(), 8u);
+    EXPECT_EQ(fast, slow);
+    EXPECT_NE(fast.front(), fast.back());
+}
 
 // One authored material with one pass over `shader`, for the stand-ins below.
 void WriteStandInMaterial(const std::filesystem::path& root, std::string_view path,

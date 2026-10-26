@@ -34,7 +34,7 @@ struct SceneHostEnvironment {
 }
 
 @MainActor
-final class SceneMetalSurface: UIView, MediaFrameProviding {
+final class SceneMetalSurface: UIView, MediaFrameProviding, OfflineSceneFrameProviding {
     override class var layerClass: AnyClass { CAMetalLayer.self }
     private var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
     private var handle: OpaquePointer?
@@ -55,20 +55,55 @@ final class SceneMetalSurface: UIView, MediaFrameProviding {
     private var explicitlyStopped = false
     private var retired = false
     private var frameCapture: SceneNativeFrameCapture?
+    private var offlineCapture: OfflineSceneFrameCapture?
+    private let exportFrameRate: Int?
+    var offlineFrameRate: Int { exportFrameRate ?? 0 }
+    var isOfflineFrameCaptureReady: Bool {
+        guard exportFrameRate != nil, mayRender, configured, let handle, session.failure == nil else { return false }
+        return owe_scene_wallpaper_frame_export_status(handle) == 1
+    }
+    func captureOfflineFrame(index: Int, frameRate: Int, maximumSize: CGSize) async throws -> MediaFrame {
+        guard let exportFrameRate, isOfflineFrameCaptureReady else { throw SceneFrameCaptureError.notReady }
+        if offlineCapture == nil {
+            offlineCapture = OfflineSceneFrameCapture(layer: metalLayer, frameRate: exportFrameRate,
+                isReady: { [weak self] in self?.isOfflineFrameCaptureReady == true },
+                request: { [weak self] index, context in
+                    guard let self, let handle = self.handle, self.isOfflineFrameCaptureReady else { throw SceneFrameCaptureError.notReady }
+                    let result = context.withCString { owe_scene_wallpaper_request_export_frame(handle, index, $0) }
+                    guard result == 0 else { throw OfflineSceneCaptureError.nativeFailed }
+                })
+        }
+        guard let offlineCapture else { throw SceneFrameCaptureError.notReady }
+        let frame = try await offlineCapture.captureOfflineFrame(index: index, frameRate: frameRate, maximumSize: maximumSize)
+        status.isHidden = true
+        return frame
+    }
+    func finishOfflineCapture() { shutdown() }
+
+    private func invalidateFrameCaptures() {
+        frameCapture?.invalidate()
+        offlineCapture?.finishOfflineCapture()
+    }
 
     var frameSource: MediaFrameSource { .scene }
     var nativeCapturePixelSize: CGSize { configured ? metalLayer.drawableSize : .zero }
     var frameCaptureFailure: String? {
         if let failure = session.failure { return failure }
         guard let handle else { return nil }
+        // A failed manual status also represents shader, surface and GPU errors,
+        // not only unsupported scene features. Preserve the native diagnosis first.
         var reason = [CChar](repeating: 0, count: 2048)
         let length = reason.withUnsafeMutableBufferPointer {
             owe_scene_wallpaper_backend_failure_reason(UnsafeMutableRawPointer(handle), $0.baseAddress, $0.count)
         }
-        return length > 0 ? String(cString: reason) : nil
+        if length > 0 { return String(cString: reason) }
+        if exportFrameRate != nil, owe_scene_wallpaper_frame_export_status(handle) < 0 {
+            return NSLocalizedString("scene.offline.nativeFailed", comment: "Native manual export failed without a backend reason")
+        }
+        return nil
     }
     var isFrameCaptureReady: Bool {
-        guard mayRender, configured, let handle, session.failure == nil,
+        guard exportFrameRate == nil, mayRender, configured, let handle, session.failure == nil,
               owe_scene_wallpaper_backend_failure_reason(UnsafeMutableRawPointer(handle), nil, 0) == 0 else { return false }
         var health = owe_surface_health()
         return owe_scene_wallpaper_surface_health(UnsafeMutableRawPointer(handle), &health) == 0
@@ -92,9 +127,10 @@ final class SceneMetalSurface: UIView, MediaFrameProviding {
     private var now: TimeInterval { environment.now() }
 
     init(url: URL, settings: PlaybackSettings, properties: [String: WallpaperProperty],
-         environment: SceneHostEnvironment? = nil) {
+         environment: SceneHostEnvironment? = nil, exportFrameRate: Int? = nil) {
         let environment = environment ?? SceneHostEnvironment()
         self.environment = environment
+        self.exportFrameRate = exportFrameRate
         session = SceneHostSession(url: url)
         self.settings = settings; self.properties = properties
         active = environment.initiallyActive()
@@ -139,7 +175,7 @@ final class SceneMetalSurface: UIView, MediaFrameProviding {
     }
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if window == nil { frameCapture?.invalidate() }
+        if window == nil { invalidateFrameCaptures() }
         guard syncPaused() else { return }
         // Screen scale can change without changing point bounds.
         guard resourceInitializationAllowed, window != nil else { return }
@@ -149,7 +185,7 @@ final class SceneMetalSurface: UIView, MediaFrameProviding {
 
     /// Shared by application notifications and deterministic lifecycle tests.
     func setApplicationActive(_ active: Bool) {
-        if !active { frameCapture?.invalidate() }
+        if !active { invalidateFrameCaptures() }
         self.active = active
         _ = syncPaused()
     }
@@ -171,6 +207,10 @@ final class SceneMetalSurface: UIView, MediaFrameProviding {
         guard check(owe_scene_wallpaper_new(&pointer)) else { return }
         guard let pointer else { terminate(NSLocalizedString("scene.renderer.unavailable", comment: "Native handle allocation failed")); return }
         handle = pointer
+        if let exportFrameRate {
+            guard (1...SceneCaptureLimits.maximumFrameRate).contains(exportFrameRate),
+                  check(owe_scene_wallpaper_enable_frame_export(pointer, UInt32(exportFrameRate))) else { return }
+        }
         guard check(owe_scene_wallpaper_init(pointer)), configureSurface(), applyNativeSettings() else { return }
         let url = session.url
         let projectRoot = url.hasDirectoryPath ? url : url.deletingLastPathComponent()
@@ -208,7 +248,7 @@ final class SceneMetalSurface: UIView, MediaFrameProviding {
             self.geometry = candidate
             return true
         }
-        frameCapture?.invalidate()
+        invalidateFrameCaptures()
         if configured, !check(owe_scene_wallpaper_begin_surface_reconfigure(handle)) { return false }
         // A live layer is changed only after the native renderer releases its surface.
         metalLayer.contentsScale = candidate.screenScale
@@ -228,6 +268,17 @@ final class SceneMetalSurface: UIView, MediaFrameProviding {
     }
     func apply(url: URL, settings: PlaybackSettings, properties: [String: WallpaperProperty]) {
         guard !retired else { return }
+        if exportFrameRate != nil {
+            guard !explicitlyStopped else { return }
+            if let handle, owe_scene_wallpaper_frame_export_status(handle) == 1 {
+                // Native manual sessions are immutable once their graph is ready.
+                // An identical SwiftUI update must not resend SET_PROPERTY.
+                if session.url == url, self.settings == settings, self.properties == properties { return }
+                explicitlyStopped = true
+                terminate(NSLocalizedString("scene.offline.sessionEnded", comment: "Manual export settings changed"))
+                return
+            }
+        }
         if session.url != url {
             closeNativeSession()
             explicitlyStopped = false
@@ -235,7 +286,7 @@ final class SceneMetalSurface: UIView, MediaFrameProviding {
             startupWait.reset(now: now)
             showStatus(NSLocalizedString("Loading native scene…", comment: ""))
         }
-        if self.settings != settings || self.properties != properties { frameCapture?.invalidate() }
+        if self.settings != settings || self.properties != properties { invalidateFrameCaptures() }
         self.settings = settings; self.properties = properties
         needsSettings = true
         guard resourceInitializationAllowed, session.failure == nil else { return }
@@ -274,7 +325,7 @@ final class SceneMetalSurface: UIView, MediaFrameProviding {
         startupWait.setWaiting(eligible: mayRender && handle != nil && session.failure == nil, now: now)
         guard let handle else { return session.failure == nil }
         let paused = !mayRender
-        if paused { frameCapture?.invalidate() }
+        if paused { invalidateFrameCaptures() }
         guard lastPaused != paused else { return true }
         guard check(owe_scene_wallpaper_set_paused(handle, paused)) else { return false }
         lastPaused = paused
@@ -282,6 +333,12 @@ final class SceneMetalSurface: UIView, MediaFrameProviding {
     }
     func readHealth() {
         guard let handle, session.failure == nil else { return }
+        if exportFrameRate != nil {
+            if owe_scene_wallpaper_frame_export_status(handle) < 0 {
+                showStatus(frameCaptureFailure ?? NSLocalizedString("scene.offline.unsupported", comment: ""))
+            }
+            return // manual sessions have no presented frame until index zero
+        }
         var reason = [CChar](repeating: 0, count: 2048)
         let length = reason.withUnsafeMutableBufferPointer {
             owe_scene_wallpaper_backend_failure_reason(UnsafeMutableRawPointer(handle), $0.baseAddress, $0.count)
@@ -339,7 +396,7 @@ final class SceneMetalSurface: UIView, MediaFrameProviding {
         setNeedsLayout()
     }
     private func closeNativeSession() {
-        frameCapture?.invalidate()
+        invalidateFrameCaptures()
         session.stop()
         startupWait.setWaiting(eligible: false, now: now)
         healthTimer?.invalidate(); healthTimer = nil
