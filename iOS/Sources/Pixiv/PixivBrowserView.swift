@@ -705,7 +705,7 @@ private struct PixivWorkDetailSheet: View {
         let title = orderedPages.count > 1
             ? String(format: NSLocalizedString(titleKey, comment: ""), page.index + 1)
             : NSLocalizedString(titleKey, comment: "")
-        Button {
+        return Button {
             store.requestDownload(work, page: page, pageCount: orderedPages.count)
         } label: {
             Label {
