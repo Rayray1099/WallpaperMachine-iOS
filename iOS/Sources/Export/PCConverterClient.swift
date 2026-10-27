@@ -19,6 +19,8 @@ actor PCConverterClient {
         let byteSize: Int64
         let sha256: String
         let sampleAspectRatioAssumed: Bool
+        let requestedFrameRate: Int
+        let requestedPackageLayout: PCConverterOptions.PackageLayout
     }
     struct State: Decodable { let jobs: [Job] }
     struct Job: Decodable {
@@ -57,13 +59,14 @@ actor PCConverterClient {
     }
 
     func convert(sourceURL: URL, entryFile: String, title: String,
+                 options: PCConverterOptions = PCConverterOptions(),
                  progress: @escaping @Sendable (Progress) -> Void) async throws -> Receipt {
         guard !running else { throw PCConverterError.busy }
         running = true
         defer { running = false; jobID = nil }
         do {
             return try await withThrowingTaskGroup(of: Receipt.self) { group in
-                group.addTask { try await self.perform(sourceURL: sourceURL, entryFile: entryFile, title: title, progress: progress) }
+                group.addTask { try await self.perform(sourceURL: sourceURL, entryFile: entryFile, title: title, options: options, progress: progress) }
                 group.addTask {
                     try await Task.sleep(nanoseconds: 30 * 60 * 1_000_000_000)
                     throw PCConverterError.timeout
@@ -85,12 +88,12 @@ actor PCConverterClient {
         }
     }
 
-    private func perform(sourceURL: URL, entryFile: String, title: String,
+    private func perform(sourceURL: URL, entryFile: String, title: String, options: PCConverterOptions,
                          progress: @escaping @Sendable (Progress) -> Void) async throws -> Receipt {
         try Task.checkCancellation()
         progress(Progress(phase: .preparing))
         let source = try Self.managedVideo(sourceURL: sourceURL, entryFile: entryFile)
-        let query = Self.conversionQuery(title: title)
+        let query = options.conversionQuery(title: title)
         var upload = request(path: "/api/jobs", method: "POST", query: query)
         upload.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         upload.setValue(String(source.bytes), forHTTPHeaderField: "Content-Length")
@@ -160,7 +163,9 @@ actor PCConverterClient {
             throw error
         }
         return Receipt(outputURL: destination, byteSize: expected.bytes, sha256: hash,
-                       sampleAspectRatioAssumed: job.sample_aspect_ratio_assumed ?? false)
+                       sampleAspectRatioAssumed: job.sample_aspect_ratio_assumed ?? false,
+                       requestedFrameRate: options.frameRate.rawValue,
+                       requestedPackageLayout: options.packageLayout)
     }
 
     private func request(path: String, method: String = "GET", query: [URLQueryItem] = [], timeout: TimeInterval = 20) -> URLRequest {
@@ -170,15 +175,6 @@ actor PCConverterClient {
         connection.authorize(&request)
         if method == "POST" { request.setValue("0", forHTTPHeaderField: "Content-Length") }
         return request
-    }
-
-    static func conversionQuery(title: String) -> [URLQueryItem] {
-        let clean = title.unicodeScalars.filter { $0.value >= 32 && $0.value != 127 }
-        let name = String(String.UnicodeScalarView(clean)).trimmingCharacters(in: .whitespacesAndNewlines)
-        let boundedName = String(String.UnicodeScalarView(name.unicodeScalars.prefix(120)))
-        return [URLQueryItem(name: "title", value: name.isEmpty ? "Wallpaper" : boundedName),
-                URLQueryItem(name: "fps", value: "60"), URLQueryItem(name: "width", value: "1668"),
-                URLQueryItem(name: "height", value: "2420"), URLQueryItem(name: "quality", value: "2")]
     }
 
     static func managedVideo(sourceURL: URL, entryFile: String) throws -> (url: URL, bytes: Int64) {

@@ -13,6 +13,126 @@ import ZIPFoundation
 /// Uses a temporary directory, never the service's user Documents/Exports path.
 @MainActor
 final class TendiesProviderExportTests: XCTestCase {
+    func testInvalidFirstIndexesRejectAndCannotBeFinished() throws {
+        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+
+        for index in [-1, 1, 3] {
+            let (writer, image) = try makeSequenceWriter(in: temporary)
+            defer { writer.cancel() }
+            let expected = TendiesExportError.frameIndexOutOfRange(index, 3)
+            XCTAssertThrowsError(try writer.append(image, frameIndex: index)) {
+                XCTAssertEqual($0 as? TendiesExportError, expected)
+            }
+            XCTAssertThrowsError(try writer.append(image, frameIndex: 0)) {
+                XCTAssertEqual($0 as? TendiesExportError, expected)
+            }
+            XCTAssertThrowsError(try writer.finish()) {
+                XCTAssertEqual($0 as? TendiesExportError, expected)
+            }
+            XCTAssertEqual(writer.writtenFrames, 0)
+            XCTAssertEqual(writer.writtenFrameBytes, 0)
+            writer.cancel()
+            XCTAssertFalse(FileManager.default.fileExists(atPath: writer.outputURL.path))
+        }
+    }
+
+    func testSkippedDuplicateAndOverrunRejectWithoutChangingAccountingOrCompleting() throws {
+        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+
+        for (accepted, rejected) in [([0], 2), ([0], 0), ([0, 1], 0), ([0, 1], 1), ([0, 1, 2], 3)] {
+            let (writer, image) = try makeSequenceWriter(in: temporary)
+            defer { writer.cancel() }
+            for index in accepted { try writer.append(image, frameIndex: index) }
+            let bytesBeforeRejection = writer.writtenFrameBytes
+            XCTAssertGreaterThan(bytesBeforeRejection, 0)
+            let expected = TendiesExportError.frameIndexOutOfRange(rejected, 3)
+            XCTAssertThrowsError(try writer.append(image, frameIndex: rejected)) {
+                XCTAssertEqual($0 as? TendiesExportError, expected)
+            }
+            if accepted.count < 3 {
+                XCTAssertThrowsError(try writer.append(image, frameIndex: accepted.count)) {
+                    XCTAssertEqual($0 as? TendiesExportError, expected)
+                }
+            }
+            XCTAssertThrowsError(try writer.finish()) {
+                XCTAssertEqual($0 as? TendiesExportError, expected)
+            }
+            XCTAssertEqual(writer.writtenFrames, accepted.count)
+            XCTAssertEqual(writer.writtenFrameBytes, bytesBeforeRejection)
+            writer.cancel()
+            XCTAssertFalse(FileManager.default.fileExists(atPath: writer.outputURL.path))
+        }
+    }
+
+    func testMissingFramesCannotFinishAndCancellationRemovesPartialArchive() throws {
+        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+
+        for count in 0..<3 {
+            let (writer, image) = try makeSequenceWriter(in: temporary)
+            defer { writer.cancel() }
+            for index in 0..<count { try writer.append(image, frameIndex: index) }
+            let bytesBeforeFinish = writer.writtenFrameBytes
+            let expected = TendiesExportError.incompleteFrames(count, 3)
+            XCTAssertThrowsError(try writer.finish()) {
+                XCTAssertEqual($0 as? TendiesExportError, expected)
+            }
+            XCTAssertThrowsError(try writer.append(image, frameIndex: count)) {
+                XCTAssertEqual($0 as? TendiesExportError, expected)
+            }
+            XCTAssertThrowsError(try writer.finish()) {
+                XCTAssertEqual($0 as? TendiesExportError, expected)
+            }
+            XCTAssertEqual(writer.writtenFrames, count)
+            XCTAssertEqual(writer.writtenFrameBytes, bytesBeforeFinish)
+            writer.cancel()
+            XCTAssertFalse(FileManager.default.fileExists(atPath: writer.outputURL.path))
+        }
+    }
+
+    func testExactSequenceFinishesOnceWithCompleteFrameAccounting() throws {
+        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let (writer, image) = try makeSequenceWriter(in: temporary)
+        defer { writer.cancel() }
+        for index in 0..<3 { try writer.append(image, frameIndex: index) }
+
+        let url = try writer.finish()
+        XCTAssertEqual(url, writer.outputURL)
+        XCTAssertThrowsError(try writer.finish())
+        let archive = try Archive(data: Data(contentsOf: url), accessMode: .read)
+        var bytes: Int64 = 0
+        for index in 0..<3 {
+            let entry = try XCTUnwrap(archive[writer.descriptor.frameMemberPath(at: index)])
+            var data = Data()
+            _ = try archive.extract(entry) { data.append($0) }
+            bytes += Int64(data.count)
+        }
+        XCTAssertEqual(archive.filter { $0.path.hasSuffix(".jpg") }.count, 3)
+        XCTAssertEqual(writer.writtenFrames, 3)
+        XCTAssertEqual(writer.writtenFrameBytes, bytes)
+    }
+
+    private func makeSequenceWriter(in directory: URL) throws -> (TendiesExportWriter, CIImage) {
+        let size = PixelSize(width: 64, height: 96)
+        let descriptor = TendiesWallpaperDescriptor(screenClass: .iPadPro11M4,
+            displayName: "Sequence Regression", identifier: 12345,
+            pixelSize: size, frameCount: 3, frameRate: 30)
+        let compositor = FrameCompositor(plan: ExportRenderPlan(pixelSize: size, aspectMode: .stretch))
+        let image = CIImage(color: CIColor(red: 1, green: 0, blue: 0))
+            .cropped(to: CGRect(x: 0, y: 0, width: size.width, height: size.height))
+        let writer = try TendiesExportWriter(descriptor: descriptor,
+            outputURL: directory.appendingPathComponent("\(UUID().uuidString).tendies"),
+            compositor: compositor, jpegQuality: 0.9, includesDisplayNameMetadata: true)
+        return (writer, compositor.render(source: image))
+    }
+
     func testSyntheticProviderWritesEveryFrameWithCorrectDimensionsAndReferences() async throws {
         let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)

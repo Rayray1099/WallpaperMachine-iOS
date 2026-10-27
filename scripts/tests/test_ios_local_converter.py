@@ -85,6 +85,9 @@ class LocalConverterTests(unittest.TestCase):
                         (60, 64, 64, 2, float("inf")), (60, 64, 64, 2, 601)):
             with self.subTest(options=options), self.assertRaises(converter.ConverterError):
                 converter._options(*options)
+        converter._options(60, 64, 64, 2, None, "posterBoard27")
+        with self.assertRaises(converter.ConverterError):
+            converter._options(60, 64, 64, 2, None, "modern")
 
     def test_urls_and_network_paths_rejected_before_access(self):
         for value in ("https://example.invalid/video.mp4", "file:///video.mp4", "pipe:0",
@@ -208,6 +211,146 @@ class LocalConverterTests(unittest.TestCase):
             with converter.zipfile.ZipFile(output) as archive:
                 self.assertEqual(len(archive.infolist()), 15)
                 self.assertIsNone(archive.testzip())
+
+    @unittest.skipUnless(os.environ.get("IOS_LOCAL_CONVERTER_INTEGRATION") == "1",
+                         "Set IOS_LOCAL_CONVERTER_INTEGRATION=1 for CPU-only tiny fixture")
+    def test_tiny_self_authored_fixture_actual_modern_layout_round_trip(self):
+        # This covers the real FFmpeg -> Swift packager -> Python validator path.
+        # It proves the selected layout is emitted and checked, not that PosterBoard
+        # accepts or lazily decodes the resulting keyframe animation.
+        with tempfile.TemporaryDirectory(prefix="wm-modern-layout-") as temporary:
+            root = Path(temporary)
+            source = root / "tiny.mp4"
+            subprocess.run([str(converter._tool("ffmpeg")), "-nostdin", "-v", "error", "-n",
+                            "-f", "lavfi", "-i", "color=c=blue:s=64x96:r=60:d=0.05",
+                            "-an", "-c:v", "mpeg4", "-threads", "1", str(source)],
+                           check=True, stdin=subprocess.DEVNULL, timeout=20)
+            events = []
+            output = converter.convert(source, root / "job", title="Modern layout", width=64,
+                                       height=96, package_layout="posterBoard27", progress=events.append)
+            self.assertEqual(events[-1]["stage"], "done")
+            self.assertEqual(events[-1]["total"], 3)
+            converter._validate(output, 3, 64, 96, 60, threading.Event(),
+                                converter.time.monotonic() + 20, "posterBoard27")
+            with converter.zipfile.ZipFile(output) as archive:
+                self.assertEqual(len(archive.infolist()), 20)
+                self.assertIsNone(archive.testzip())
+                names = set(archive.namelist())
+                self.assertEqual(len([name for name in names if name.endswith(".jpg")]), 3)
+                background = next(name for name in names if name.endswith("_Background-" +
+                    "834w-1210h@2x~ipad.ca/main.caml"))
+                caml = converter.ET.fromstring(archive.read(background))
+                self.assertTrue(caml.tag.endswith("caml"))
+                self.assertEqual(len([node for node in caml.iter() if node.tag.endswith("CGImage")]), 3)
+                wallpaper_name = next(name for name in names if name.endswith("/Wallpaper.plist"))
+                wallpaper = converter.plistlib.loads(archive.read(wallpaper_name))
+                self.assertEqual(wallpaper["family"], "Clownfish")
+                asset = wallpaper["assets"]["lockAndHome"]["default"]
+                for key in ("backgroundAnimationFileName", "floatingAnimationFileNameKey",
+                            "foregroundAnimationFileName"):
+                    self.assertIn(asset[key] + "/main.caml", "\n".join(names))
+
+    @unittest.skipUnless(os.environ.get("IOS_LOCAL_CONVERTER_INTEGRATION") == "1",
+                         "Set IOS_LOCAL_CONVERTER_INTEGRATION=1 for CPU-only tiny fixture")
+    def test_modern_validator_rejects_malformed_metadata_actual_package(self):
+        with tempfile.TemporaryDirectory(prefix="wm-modern-validation-") as temporary:
+            root = Path(temporary)
+            source = root / "tiny.mp4"
+            subprocess.run([str(converter._tool("ffmpeg")), "-nostdin", "-v", "error", "-n",
+                            "-f", "lavfi", "-i", "color=c=blue:s=64x96:r=60:d=0.05",
+                            "-an", "-c:v", "mpeg4", "-threads", "1", str(source)],
+                           check=True, stdin=subprocess.DEVNULL, timeout=20)
+            output = converter.convert(source, root / "job", title="Metadata validation",
+                                       width=64, height=96, package_layout="posterBoard27")
+            with converter.zipfile.ZipFile(output) as archive:
+                members = {entry.filename: archive.read(entry) for entry in archive.infolist()}
+            wallpaper_path = next(name for name in members if name.endswith("/Wallpaper.plist"))
+            wallpaper = converter.plistlib.loads(members[wallpaper_path])
+            asset = wallpaper["assets"]["lockAndHome"]["default"]
+            base = wallpaper_path.rsplit("/", 1)[0]
+            invalid = root / "invalid.tendies"
+
+            def reject(changes):
+                with converter.zipfile.ZipFile(invalid, "w") as archive:
+                    for name, payload in members.items():
+                        archive.writestr(name, changes.get(name, payload))
+                with self.assertRaises(converter.ConverterError) as caught:
+                    converter._validate(invalid, 3, 64, 96, 60, threading.Event(),
+                                        converter.time.monotonic() + 20, "posterBoard27")
+                self.assertEqual(caught.exception.code, "validation")
+                self.assertNotIn("PRIVATE_METADATA", str(caught.exception))
+
+            for keys in ((), ("assets",), ("assets", "lockAndHome"),
+                         ("assets", "lockAndHome", "default")):
+                for value in ([], ["PRIVATE_METADATA"], "PRIVATE_METADATA", 42, False):
+                    with self.subTest(keys=keys, value=value):
+                        changed = converter.plistlib.loads(members[wallpaper_path])
+                        if keys:
+                            parent = changed
+                            for key in keys[:-1]:
+                                parent = parent[key]
+                            parent[keys[-1]] = value
+                        else:
+                            changed = value
+                        reject({wallpaper_path: converter.plistlib.dumps(changed)})
+
+            plane_keys = ("backgroundAnimationFileName", "floatingAnimationFileNameKey",
+                          "foregroundAnimationFileName")
+            for key in plane_keys:
+                for value in ([], {}, 42, "", "../PRIVATE_METADATA.ca", "a\\PRIVATE_METADATA.ca",
+                              "missing.ca", asset[plane_keys[1 if key == plane_keys[0] else 0]]):
+                    with self.subTest(key=key, value=value):
+                        changed = converter.plistlib.loads(members[wallpaper_path])
+                        changed["assets"]["lockAndHome"]["default"][key] = value
+                        reject({wallpaper_path: converter.plistlib.dumps(changed)})
+
+            for key in plane_keys:
+                index_path = f"{base}/{asset[key]}/index.xml"
+                for value in ([], "PRIVATE_METADATA", {"rootDocument": "missing.caml"}, {}):
+                    with self.subTest(plane=key, index=value):
+                        reject({index_path: converter.plistlib.dumps(value)})
+            # Mutations never rewrite the valid output or its source JPEGs.
+            converter._validate(output, 3, 64, 96, 60, threading.Event(),
+                                converter.time.monotonic() + 20, "posterBoard27")
+
+    @unittest.skipUnless(os.environ.get("IOS_LOCAL_CONVERTER_INTEGRATION") == "1",
+                         "Set IOS_LOCAL_CONVERTER_INTEGRATION=1 for CPU-only tiny fixture")
+    def test_explicit_30fps_keeps_full_authored_duration_and_quality(self):
+        with tempfile.TemporaryDirectory(prefix="wm-explicit-30fps-") as temporary:
+            root = Path(temporary)
+            source = root / "cadence.mp4"
+            subprocess.run([str(converter._tool("ffmpeg")), "-nostdin", "-v", "error", "-n",
+                            "-f", "lavfi", "-i", "testsrc2=s=64x96:r=60:d=0.2", "-an",
+                            "-c:v", "mpeg4", "-threads", "1", str(source)],
+                           check=True, stdin=subprocess.DEVNULL, timeout=20)
+            original = source.read_bytes()
+            events = []
+            output = converter.convert(source, root / "job", title="Explicit cadence", fps=30,
+                                       width=64, height=96, quality=2, progress=events.append)
+            self.assertEqual(source.read_bytes(), original)
+            self.assertEqual((events[-1]["stage"], events[-1]["total"]), ("done", 6))
+            converter._validate(output, 6, 64, 96, 30, threading.Event(),
+                                converter.time.monotonic() + 20)
+            frames = root / "archive-frames"
+            frames.mkdir()
+            with converter.zipfile.ZipFile(output) as archive:
+                self.assertEqual(len(archive.infolist()), 18)
+                self.assertIsNone(archive.testzip())
+                jpgs = sorted(name for name in archive.namelist() if name.endswith(".jpg"))
+                for index, member in enumerate(jpgs):
+                    payload = archive.read(member)
+                    self.assertEqual(payload, (root / "job/frames" / f"frame-{index:05d}.jpg").read_bytes())
+                    (frames / f"{index:05d}.jpg").write_bytes(payload)
+                caml = next(name for name in archive.namelist() if name.endswith("/main.caml")
+                            and "_Background-" in name)
+                document = converter.ET.fromstring(archive.read(caml))
+                animation = next(node for node in document.iter() if node.tag.endswith("animation"))
+                self.assertAlmostEqual(float(animation.attrib["duration"]), 0.2)
+            # Decode every archived JPEG, not just its SOF header, using the actual CPU codec.
+            subprocess.run([str(converter._tool("ffmpeg")), "-nostdin", "-v", "error", "-xerror",
+                            "-framerate", "30", "-i", str(frames / "%05d.jpg"),
+                            "-frames:v", "6", "-f", "null", "-"],
+                           check=True, stdin=subprocess.DEVNULL, timeout=20)
 
     @unittest.skipUnless(os.environ.get("IOS_LOCAL_CONVERTER_INTEGRATION") == "1",
                          "Set IOS_LOCAL_CONVERTER_INTEGRATION=1 for CPU-only tiny fixture")

@@ -55,6 +55,7 @@ $('convert').addEventListener('submit',async event=>{
   const file=$('video').files[0]; if(!file || !token || uploading || latest?.busy) return;
   if(file.size<=0 || file.size>2*1024**3) { $('message').textContent='Choose a video between 1 byte and 2 GiB.'; return; }
   const query=new URLSearchParams({title:$('title').value,fps:$('fps').value,quality:$('quality').value,width:'1668',height:'2420'});
+  if($('package-layout').value === 'posterBoard27') query.set('package_layout','posterBoard27');
   stickyError=''; uploading=true; $('submit').disabled=true; $('upload').hidden=false; $('upload').value=0;
   $('message').textContent='Uploading to your PC. Keep this page open until the upload finishes.';
   const xhr=new XMLHttpRequest(); xhr.open('POST','/api/jobs?'+query); xhr.setRequestHeader('Authorization','Bearer '+token); xhr.setRequestHeader('Content-Type','application/octet-stream');

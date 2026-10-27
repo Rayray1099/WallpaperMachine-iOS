@@ -76,6 +76,10 @@ REQUIRED = {
         "testProviderCancellationAndFinishEndPendingRequestAndIgnoreLateReturn",
     ),
     "TendiesProviderExportTests": (
+        "testInvalidFirstIndexesRejectAndCannotBeFinished",
+        "testSkippedDuplicateAndOverrunRejectWithoutChangingAccountingOrCompleting",
+        "testMissingFramesCannotFinishAndCancellationRemovesPartialArchive",
+        "testExactSequenceFinishesOnceWithCompleteFrameAccounting",
         "testSyntheticProviderWritesEveryFrameWithCorrectDimensionsAndReferences",
         "testMaximumQualityAppendLeavesCompleteFramesAcrossAutoreleaseBoundaries",
     ),
@@ -161,6 +165,7 @@ class PCIntegrationVerdictTests(unittest.TestCase):
     def test_actual_test_sources_match_allowlist_and_sha_manifest(self):
         manifest = runner.source_manifest()
         self.assertIn("iOS/Sources/Export/PCConverterClient.swift", manifest)
+        self.assertIn("iOS/Sources/Export/PCConverterOptions.swift", manifest)
         self.assertIn("iOS/Sources/Renderer/SceneSharedAssetsInstaller.swift", manifest)
         self.assertTrue(all(len(digest) == 64 for digest in manifest.values()))
         self.assertFalse(any("artifacts/" in path for path in manifest))

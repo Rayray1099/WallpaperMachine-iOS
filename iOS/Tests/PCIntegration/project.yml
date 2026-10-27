@@ -41,6 +41,8 @@ targets:
         group: ProductionSources
       - path: ../../Sources/Export/PCConverterConnection.swift
         group: ProductionSources
+      - path: ../../Sources/Export/PCConverterOptions.swift
+        group: ProductionSources
       - path: ../../Sources/Export/PCConverterClient.swift
         group: ProductionSources
       - path: ../../Sources/Export/PCConverterView.swift
@@ -54,6 +56,8 @@ targets:
       - path: ../../Sources/Export/TendiesScreenClass.swift
         group: ProductionSources
       - path: ../../Sources/Export/TendiesManifest.swift
+        group: ProductionSources
+      - path: ../../Sources/Export/TendiesPosterBoard27.swift
         group: ProductionSources
       - path: ../../Sources/Export/KeyedArchiveBuilder.swift
         group: ProductionSources

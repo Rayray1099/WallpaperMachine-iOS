@@ -59,16 +59,36 @@ final class PCConverterClientTests: XCTestCase {
     }
 
     func testConversionKeepsFullDurationAndFixedNativeFitOptions() throws {
-        let options = PCConverterClient.conversionQuery(title: " A & 桌布\nname ")
-        let values = Dictionary(uniqueKeysWithValues: options.map { ($0.name, $0.value ?? "") })
-        XCTAssertEqual(values, ["title": "A & 桌布name", "fps": "60", "width": "1668", "height": "2420", "quality": "2"])
-        XCTAssertNil(values["duration"])
+        XCTAssertEqual(PCConverterOptions().frameRate, .fps30)
+        XCTAssertEqual(PCConverterOptions().packageLayout, .legacy)
+        XCTAssertEqual(PCConverterOptions(), PCConverterOptions(frameRate: .fps30))
+        XCTAssertEqual(PCConverterOptions.FrameRate.allCases.map(\.rawValue), [30, 60])
+        XCTAssertEqual(PCConverterOptions.PackageLayout.allCases.map(\.rawValue), ["legacy", "posterBoard27"])
         let connection = try PCConverterConnection(link: "http://192.168.1.2:57351/#token=\(token)")
-        let titledURL = connection.endpoint(path: "/api/jobs", query: PCConverterClient.conversionQuery(title: "A+B & C"))
-        XCTAssertTrue(titledURL.absoluteString.contains("title=A%2BB%20%26%20C"))
-        let longName = String(repeating: "👩‍💻", count: 120)
-        let bounded = PCConverterClient.conversionQuery(title: longName)
-        XCTAssertLessThanOrEqual(bounded.first?.value?.unicodeScalars.count ?? 0, 120)
+        for rate in PCConverterOptions.FrameRate.allCases {
+            for layout in PCConverterOptions.PackageLayout.allCases {
+                let options = PCConverterOptions(frameRate: rate, packageLayout: layout)
+                let query = options.conversionQuery(title: " A & 桌布\nname ")
+                let values = Dictionary(uniqueKeysWithValues: query.map { ($0.name, $0.value ?? "") })
+                var expected = ["title": "A & 桌布name", "fps": String(rate.rawValue),
+                                "width": "1668", "height": "2420", "quality": "2"]
+                if layout == .posterBoard27 { expected["package_layout"] = "posterBoard27" }
+                XCTAssertEqual(values, expected)
+                XCTAssertNil(values["duration"])
+                let titledURL = connection.endpoint(path: "/api/jobs", query: options.conversionQuery(title: "A+B & C"))
+                XCTAssertTrue(titledURL.absoluteString.contains("title=A%2BB%20%26%20C"))
+                let roundTrip = URLComponents(url: titledURL, resolvingAgainstBaseURL: false)?.queryItems ?? []
+                XCTAssertEqual(roundTrip.first(where: { $0.name == "package_layout" })?.value,
+                               layout == .legacy ? nil : "posterBoard27")
+                let longName = String(repeating: "👩‍💻", count: 120)
+                let bounded = options.conversionQuery(title: longName)
+                XCTAssertEqual(bounded.first?.value?.unicodeScalars.count, 120)
+                XCTAssertEqual(options.conversionQuery(title: " \n\u{7f} ").first?.value, "Wallpaper")
+            }
+        }
+        XCTAssertEqual(PCConverterOptions().conversionQuery(title: "Default"),
+                       PCConverterOptions(frameRate: .fps30, packageLayout: .legacy).conversionQuery(title: "Default"))
+        XCTAssertNotEqual(PCConverterOptions(), PCConverterOptions(packageLayout: .posterBoard27))
     }
 
     func testManagedVideoResolutionRejectsEscapesEmptyAndSymlinks() throws {

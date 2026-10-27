@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import http.client
+from html.parser import HTMLParser
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -138,8 +141,8 @@ class IOSConverterHTTPTests(unittest.TestCase):
         self.assertEqual(status, 202, response)
         return json.loads(response)["id"]
 
-    def await_job(self, identifier, expected):
-        deadline = time.monotonic() + 3
+    def await_job(self, identifier, expected, timeout=3):
+        deadline = time.monotonic() + timeout
         pause = threading.Event()
         while time.monotonic() < deadline:
             document = self.state()
@@ -209,7 +212,8 @@ class IOSConverterHTTPTests(unittest.TestCase):
     def test_unknown_duplicate_or_unbounded_options_are_rejected_before_body(self):
         for query in ("path=C%3A%5Cprivate.mp4", "url=http%3A%2F%2Fexample.invalid%2Fa.mp4",
                       "title=a&title=b", "fps=0", "fps=121", "fps=nan", "width=65",
-                      "width=4096&height=4096", "quality=0", "duration=NaN", "duration=601"):
+                      "width=4096&height=4096", "quality=0", "duration=NaN", "duration=601",
+                      "package_layout=modern", "package_layout=posterBoard27&package_layout=legacy"):
             with self.subTest(query=query):
                 status, _, _ = self.raw_request("POST", "/api/jobs?" + query,
                     [("Host", self.authority), ("Authorization", "Bearer " + TOKEN),
@@ -242,6 +246,88 @@ class IOSConverterHTTPTests(unittest.TestCase):
         self.assertEqual(call["input"].parent, call["job_dir"])
         self.assertNotIn(str(self.root), json.dumps(job))
         self.assertEqual(self.secret.read_bytes(), b"outside-owned-job-sentinel")
+
+    def test_explicit_30_and_60_fps_keep_native_full_length_options(self):
+        for fps in (30, 60):
+            with self.subTest(fps=fps):
+                identifier = self.upload(query=urlencode({"title": "Selected cadence", "fps": fps,
+                    "width": 1668, "height": 2420, "quality": 2}))
+                self.await_job(identifier, "done")
+                call = self.converter.calls[-1]
+                self.assertEqual(call["options"], {"fps": fps, "width": 1668,
+                                                   "height": 2420, "quality": 2})
+                self.assertEqual(call["bytes"], UPLOAD)
+                self.assertNotIn("duration", call["options"])
+
+    def test_modern_package_layout_is_forwarded_and_persisted(self):
+        identifier = self.upload(query=urlencode({"title": "Modern layout", "fps": 30,
+                                                   "width": 1668, "height": 2420, "quality": 2,
+                                                   "package_layout": "posterBoard27"}))
+        job = self.await_job(identifier, "done")
+        self.assertEqual(job["package_layout"], "posterBoard27")
+        self.assertEqual(self.converter.calls[-1]["options"], {
+            "fps": 30, "width": 1668, "height": 2420, "quality": 2,
+            "package_layout": "posterBoard27"})
+        receipt = json.loads((self.data / "jobs" / identifier / "completed.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["options"]["package_layout"], "posterBoard27")
+        self.close_server()
+        self.start_server(token=None)
+        restored = self.state()["jobs"][0]
+        self.assertEqual(restored["package_layout"], "posterBoard27")
+
+    @unittest.skipUnless(os.environ.get("IOS_LOCAL_CONVERTER_INTEGRATION") == "1",
+                         "Set IOS_LOCAL_CONVERTER_INTEGRATION=1 for CPU-only tiny fixture")
+    def test_real_http_modern_layout_round_trip(self):
+        # The HTTP server owns the upload; the real converter owns FFmpeg and the
+        # Swift packager. This is archive/transport proof, not PosterBoard playback.
+        from local_converter import _tool, convert
+
+        self.server.state.converter = convert
+        source = self.root / "http-modern.mp4"
+        subprocess.run([str(_tool("ffmpeg")), "-nostdin", "-v", "error", "-n",
+                        "-f", "lavfi", "-i", "color=c=green:s=64x96:r=60:d=0.05",
+                        "-an", "-c:v", "mpeg4", "-threads", "1", str(source)],
+                       check=True, stdin=subprocess.DEVNULL, timeout=20)
+        identifier = self.upload(title="HTTP modern", body=source.read_bytes(),
+                                 query=urlencode({"title": "HTTP modern", "fps": 60,
+                                                  "width": 64, "height": 96, "quality": 2,
+                                                  "package_layout": "posterBoard27"}))
+        job = self.await_job(identifier, "done", timeout=120)
+        self.assertEqual(job["package_layout"], "posterBoard27")
+        status, _, body = self.request(job["download_url"], auth=False)
+        self.assertEqual(status, 200)
+        with zipfile.ZipFile(io.BytesIO(body)) as archive:
+            self.assertIsNone(archive.testzip())
+            self.assertEqual(len(archive.infolist()), 20)
+            self.assertEqual(len([name for name in archive.namelist() if name.endswith(".jpg")]), 3)
+            main = next(name for name in archive.namelist() if name.endswith("_Background-834w-1210h@2x~ipad.ca/main.caml"))
+            self.assertTrue(archive.read(main).lstrip().startswith(b"<?xml"))
+
+    def test_browser_defaults_to_visible_30fps_without_removing_60fps(self):
+        class FrameRatePicker(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.in_picker = False
+                self.options = []
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == "select":
+                    self.in_picker = attrs.get("id") == "fps"
+                elif tag == "option" and self.in_picker:
+                    self.options.append((attrs.get("value"), "selected" in attrs))
+
+            def handle_endtag(self, tag):
+                if tag == "select":
+                    self.in_picker = False
+
+        status, _, body = self.request("/", auth=False)
+        self.assertEqual(status, 200)
+        parser = FrameRatePicker()
+        parser.feed(body.decode("utf-8"))
+        selected = [value for value, explicit in parser.options if explicit]
+        self.assertEqual(selected or [parser.options[0][0]], ["30"])
+        self.assertIn("60", [value for value, _ in parser.options])
 
     def test_one_active_conversion_blocks_second_upload_without_overwrite(self):
         self.converter.release.clear()

@@ -24,6 +24,7 @@ from lib.paths import ROOT
 
 MAX_INPUT_BYTES = 2 * 1024**3
 DEFAULTS = {"fps": 60, "width": 1668, "height": 2420, "quality": 2}
+PACKAGE_LAYOUTS = frozenset(("legacy", "posterBoard27"))
 STATIC = Path(__file__).with_name("converter_web")
 UUID_PATTERN = re.compile(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}")
 
@@ -45,7 +46,7 @@ def clean_title(value: str) -> str:
 
 def options_from(query: str) -> tuple[str, dict]:
     values = parse_qs(query, keep_blank_values=True, strict_parsing=True) if query else {}
-    if set(values) - {"title", "fps", "width", "height", "quality", "duration"} or any(len(v) != 1 for v in values.values()):
+    if set(values) - {"title", "fps", "width", "height", "quality", "duration", "package_layout"} or any(len(v) != 1 for v in values.values()):
         raise ValueError("Unknown or repeated conversion option")
     title = clean_title(values.pop("title", ["Wallpaper"])[0])
     options = dict(DEFAULTS)
@@ -64,6 +65,12 @@ def options_from(query: str) -> tuple[str, dict]:
         if not re.fullmatch(r"[0-9]{1,3}(?:\.[0-9]{1,3})?", raw) or not 0 < float(raw) <= 600:
             raise ValueError("Duration must be positive and at most 600 seconds")
         options["duration"] = float(raw)
+    if "package_layout" in values:
+        layout = values["package_layout"][0]
+        if layout not in PACKAGE_LAYOUTS:
+            raise ValueError("Unsupported package layout")
+        if layout != "legacy":
+            options["package_layout"] = layout
     return title, options
 
 
@@ -85,7 +92,8 @@ class Job:
     def public(self) -> dict:
         result = {"id": self.id, "title": self.title, "state": self.state,
                   "progress": dict(self.progress), "error": self.error,
-                  "sample_aspect_ratio_assumed": self.sample_aspect_ratio_assumed}
+                  "sample_aspect_ratio_assumed": self.sample_aspect_ratio_assumed,
+                  "package_layout": self.options.get("package_layout", "legacy")}
         if self.state == "done" and self.output is not None:
             result["sha256"] = self.sha256
             result["bytes"] = self.output.stat().st_size
@@ -478,10 +486,11 @@ def main() -> int:
     parser.add_argument("--data-dir", type=Path, default=ROOT / "artifacts/ios-local-converter/data")
     parser.add_argument("--input", type=Path, help="Trusted local file to copy and convert at startup; never exposed as an HTTP path")
     parser.add_argument("--title", default="Wallpaper")
+    parser.add_argument("--package-layout", choices=sorted(PACKAGE_LAYOUTS), default="legacy")
     args = parser.parse_args()
     server = create_server(args.host, args.port, args.data_dir)
     if args.input:
-        job = server.state.enqueue_local(args.input, args.title)
+        job = server.state.enqueue_local(args.input, args.title, package_layout=args.package_layout)
         print("Queued local conversion " + job.id, flush=True)
     print(f"Local converter: http://{args.host}:{server.server_address[1]}/#token={server.state.token}", flush=True)
     print("Private LAN only; no remote URL imports, external upload, or automatic system wallpaper writes. Keep this console running.", flush=True)

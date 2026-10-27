@@ -40,9 +40,11 @@ MAX_JOB_BYTES = 3_800_000_000
 MAX_SECONDS = 600
 MAX_RUNTIME_SECONDS = 1800
 MIN_FREE_BYTES = 128 * 1024**2
+PACKAGE_LAYOUT_METADATA_COUNTS = {"legacy": 12, "posterBoard27": 17}
+PACKAGE_LAYOUTS = frozenset(PACKAGE_LAYOUT_METADATA_COUNTS)
 CORE_FILES = tuple(ROOT / "iOS/Sources/Export" / (name + ".swift") for name in (
     "ExportGeometry", "WallpaperExportSettings", "TendiesScreenClass",
-    "TendiesManifest", "KeyedArchiveBuilder", "ZipArchiveWriter"))
+    "TendiesManifest", "TendiesPosterBoard27", "KeyedArchiveBuilder", "ZipArchiveWriter"))
 PACKAGER_SOURCE = Path(__file__).with_name("package_tendies_frames.swift")
 _BUILD_LOCK = threading.Lock()
 
@@ -92,7 +94,8 @@ def validate_input(path: Path) -> Path:
         raise ConverterError("input", "Select a readable regular local video file.") from None
 
 
-def _options(fps: int, width: int, height: int, quality: int, duration: float | None) -> None:
+def _options(fps: int, width: int, height: int, quality: int, duration: float | None,
+             package_layout: str = "legacy") -> None:
     if type(fps) is not int or not 1 <= fps <= 120:
         _fail("options", "Frame rate must be an integer from 1 to 120.")
     if (type(width) is not int or type(height) is not int or
@@ -104,6 +107,8 @@ def _options(fps: int, width: int, height: int, quality: int, duration: float | 
     if duration is not None and (isinstance(duration, bool) or not isinstance(duration, (float, int)) or
                                  not math.isfinite(duration) or not 0 < duration <= MAX_SECONDS):
         _fail("options", "Duration must be positive and no longer than 600 seconds.")
+    if type(package_layout) is not str or package_layout not in PACKAGE_LAYOUTS:
+        _fail("options", "Package layout is unsupported.")
 
 
 def _tool(name: str) -> Path:
@@ -309,13 +314,17 @@ def _jpeg_size(data: bytes) -> tuple[int, int]:
 
 
 def _validate(output: Path, count: int, width: int, height: int, fps: int,
-              cancel: threading.Event, deadline: float) -> None:
+              cancel: threading.Event, deadline: float,
+              package_layout: str = "legacy") -> None:
     if not 0 < output.stat().st_size < MAX_ARCHIVE_BYTES:
         _fail("validation", "Generated archive exceeds the supported size limit.")
     with zipfile.ZipFile(output) as archive:
         entries = archive.infolist()
         names = {entry.filename for entry in entries}
-        if len(names) != len(entries) or len(entries) != count + 12:
+        metadata_count = PACKAGE_LAYOUT_METADATA_COUNTS.get(package_layout)
+        if metadata_count is None:
+            _fail("validation", "Generated archive uses an unsupported package layout.")
+        if len(names) != len(entries) or len(entries) != count + metadata_count:
             _fail("validation", "Generated archive has an invalid entry count.")
         jpgs = sorted(name for name in names if name.endswith(".jpg"))
         if len(jpgs) != count or not jpgs:
@@ -353,14 +362,47 @@ def _validate(output: Path, count: int, width: int, height: int, fps: int,
         animation = next(node for node in xml.iter() if node.tag.endswith("animation"))
         if not math.isclose(float(animation.attrib["duration"]), count / fps, abs_tol=0.000001):
             _fail("validation", "Generated animation timing does not match the request.")
-        wallpaper = plistlib.loads(metadata[background.rsplit("/", 1)[0] + "/Wallpaper.plist"])
+        wallpaper_folder = background.rsplit("/", 1)[0]
+        wallpaper = plistlib.loads(metadata[wallpaper_folder + "/Wallpaper.plist"])
+        if not isinstance(wallpaper, dict):
+            _fail("validation", "Generated wallpaper metadata must be a dictionary.")
         if wallpaper.get("logicalScreenClass") != "834w-1210h@2x~ipad":
             _fail("validation", "Generated wallpaper has an unexpected logical screen class.")
+        index = plistlib.loads(metadata[background + "/index.xml"])
+        if not isinstance(index, dict) or index.get("rootDocument") != "main.caml":
+            _fail("validation", "Generated animation index does not declare its root document.")
+        if package_layout == "posterBoard27":
+            asset = wallpaper
+            for key in ("assets", "lockAndHome", "default"):
+                asset = asset.get(key)
+                if not isinstance(asset, dict):
+                    _fail("validation", "Modern package asset metadata must contain dictionaries.")
+            plane_names = [asset.get(key) for key in (
+                "backgroundAnimationFileName", "floatingAnimationFileNameKey",
+                "foregroundAnimationFileName")]
+            if any(not isinstance(name, str) or not name.endswith(".ca") or
+                   "/" in name or "\\" in name for name in plane_names):
+                _fail("validation", "Modern package metadata contains an invalid plane reference.")
+            if (len(set(plane_names)) != 3 or
+                    f"{wallpaper_folder}/{plane_names[0]}" != background or
+                    any(f"{wallpaper_folder}/{name}/main.caml" not in metadata
+                        for name in plane_names)):
+                _fail("validation", "Modern package metadata does not contain all published planes.")
+            for name in plane_names:
+                index_data = metadata.get(f"{wallpaper_folder}/{name}/index.xml")
+                if index_data is None:
+                    _fail("validation", "Modern package plane index is missing.")
+                plane_index = plistlib.loads(index_data)
+                if not isinstance(plane_index, dict) or plane_index.get("rootDocument") != "main.caml":
+                    _fail("validation", "Modern package plane index does not declare its root document.")
+            if wallpaper.get("family") != "Clownfish":
+                _fail("validation", "Modern package metadata has an unexpected family.")
 
 
 def convert(input_path: Path, job_dir: Path, *, title: str, fps: int = 60,
             width: int = 1668, height: int = 2420, quality: int = 2,
-            duration: float | None = None, progress: Callable[[dict], None] | None = None,
+            duration: float | None = None, package_layout: str = "legacy",
+            progress: Callable[[dict], None] | None = None,
             cancel_event: threading.Event | None = None) -> Path:
     """Convert a trusted local path into a new output.tendies without editing input.
 
@@ -389,7 +431,7 @@ def convert(input_path: Path, job_dir: Path, *, title: str, fps: int = 60,
                       "title": safe_title, **sample_aspect_metadata})
 
     try:
-        _options(fps, width, height, quality, duration)
+        _options(fps, width, height, quality, duration, package_layout)
         source = validate_input(Path(input_path))
         if job.exists() and (job.is_symlink() or not job.is_dir()):
             _fail("job", "Job directory must be a regular local directory.")
@@ -441,12 +483,13 @@ def convert(input_path: Path, job_dir: Path, *, title: str, fps: int = 60,
         request = job / "package-request.json"
         request.write_text(json.dumps({"framesDir": str(frames), "output": str(output),
                                       "width": width, "height": height, "fps": fps, "count": count,
-                                      "name": safe_title}, ensure_ascii=False), encoding="utf-8")
+                                      "name": safe_title,
+                                      "packageLayout": package_layout}, ensure_ascii=False), encoding="utf-8")
         emit("packaging", count)
         _run([str(binary), str(request)], job, "package", cancel, deadline,
              lambda: emit("packaging", count))
         emit("validating", count)
-        _validate(output, count, width, height, fps, cancel, deadline)
+        _validate(output, count, width, height, fps, cancel, deadline, package_layout)
         emit("done", count)
         return output
     except Exception as error:
@@ -469,11 +512,12 @@ def main() -> int:
     parser.add_argument("--height", type=int, default=2420)
     parser.add_argument("--quality", type=int, default=2)
     parser.add_argument("--duration", type=float)
+    parser.add_argument("--package-layout", choices=sorted(PACKAGE_LAYOUTS), default="legacy")
     args = parser.parse_args()
     try:
         output = convert(args.input, args.job_dir, title=args.title, fps=args.fps,
                          width=args.width, height=args.height, quality=args.quality,
-                         duration=args.duration,
+                         duration=args.duration, package_layout=args.package_layout,
                          progress=lambda event: print(json.dumps(event, ensure_ascii=False), flush=True))
         print(json.dumps({"output": str(output)}, ensure_ascii=False))
         return 0

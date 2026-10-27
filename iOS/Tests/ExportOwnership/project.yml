@@ -35,6 +35,7 @@ targets:
       - path: ../../Sources/Export/WallpaperExportSettings.swift
       - path: ../../Sources/Export/TendiesScreenClass.swift
       - path: ../../Sources/Export/TendiesManifest.swift
+      - path: ../../Sources/Export/TendiesPosterBoard27.swift
       - path: ../../Sources/Export/KeyedArchiveBuilder.swift
       - path: ../../Sources/Export/ZipArchiveWriter.swift
       - path: ../../Sources/Export/FrameCompositor.swift

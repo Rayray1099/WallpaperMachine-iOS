@@ -122,6 +122,8 @@ public struct WallpaperExportView: View {
                     Section("PosterBoard / AirCard") {
                         Text(l("Experimental archive compatibility, not verified installation. The OS controls loop duration. No 300-frame cap is imposed. No system databases are changed.",
                                "封存檔相容性仍屬實驗性，尚未驗證安裝。循環長度由系統控制，不設定 300 影格限制，也不修改系統資料庫。"))
+                        Text(NSLocalizedString("export.tendies.playbackRisk", comment: ""))
+                            .font(.footnote).foregroundStyle(.orange)
                         TextField(l("Wallpaper name", "桌布名稱"), text: $options.tendies.wallpaperName)
                         Text(verbatim: options.tendies.screenClass.name).font(.caption.monospaced())
                         Slider(value: $options.tendies.frameQuality, in: 0.1...1) { Text(l("JPEG quality", "JPEG 品質")) }

@@ -26,7 +26,7 @@ private final class PCConverterModel: ObservableObject {
     func showConnectionError() { messageKey = "export.pc.error.connection" }
     func clearMessage() { messageKey = nil }
 
-    func start(item: WallpaperItem, sourceURL: URL, connection: PCConverterConnection) {
+    func start(item: WallpaperItem, sourceURL: URL, connection: PCConverterConnection, options: PCConverterOptions) {
         guard !isRunning, item.kind == .video else { return }
         let id = UUID()
         operationID = id
@@ -35,7 +35,7 @@ private final class PCConverterModel: ObservableObject {
         let client = PCConverterClient(connection: connection)
         operation = Task {
             do {
-                let result = try await client.convert(sourceURL: sourceURL, entryFile: item.entryFile, title: item.title) { [weak self] value in
+                let result = try await client.convert(sourceURL: sourceURL, entryFile: item.entryFile, title: item.title, options: options) { [weak self] value in
                     Task { @MainActor in
                         guard let self, self.operationID == id else { return }
                         self.progress = value
@@ -62,6 +62,8 @@ struct PCConverterView: View {
     @StateObject private var model = PCConverterModel()
     @State private var pastedLink = ""
     @State private var sharing = false
+    @State private var frameRate = PCConverterOptions.FrameRate.fps30
+    @State private var packageLayout = PCConverterOptions.PackageLayout.legacy
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -94,10 +96,27 @@ struct PCConverterView: View {
                 }
                 if item.kind == .video {
                     Section {
+                        Picker(text("export.pc.frameRate"), selection: $frameRate) {
+                            Text(text("export.pc.fps30")).tag(PCConverterOptions.FrameRate.fps30)
+                            Text(text("export.pc.fps60")).tag(PCConverterOptions.FrameRate.fps60)
+                        }
+                        .disabled(model.isRunning)
+                        .accessibilityIdentifier("wm.export.pc.frameRate")
+                        Picker(text("export.pc.packageLayout"), selection: $packageLayout) {
+                            Text(text("export.pc.layoutLegacy")).tag(PCConverterOptions.PackageLayout.legacy)
+                            Text(text("export.pc.layoutPosterBoard27")).tag(PCConverterOptions.PackageLayout.posterBoard27)
+                        }
+                        .disabled(model.isRunning)
+                        .accessibilityIdentifier("wm.export.pc.packageLayout")
+                        Text(text("export.pc.layoutExperimentalNote"))
+                            .font(.footnote).foregroundStyle(.secondary)
                         Text(text("export.pc.settings"))
+                        Text(text("export.tendies.playbackRisk"))
+                            .font(.footnote).foregroundStyle(.orange)
                         Button(text("export.pc.start")) {
                             guard let connection = connections.connection else { return }
-                            model.start(item: item, sourceURL: sourceURL, connection: connection)
+                            model.start(item: item, sourceURL: sourceURL, connection: connection,
+                                        options: PCConverterOptions(frameRate: frameRate, packageLayout: packageLayout))
                         }
                         .disabled(connections.connection == nil || model.isRunning)
                         .accessibilityIdentifier("wm.export.pc.start")
@@ -120,6 +139,12 @@ struct PCConverterView: View {
                 if let receipt = model.receipt {
                     Section {
                         Text(text("export.pc.finished")).font(.footnote)
+                        Text(String(format: text("export.pc.requestedFrameRate"), receipt.requestedFrameRate))
+                            .font(.caption)
+                        Text(String(format: text("export.pc.requestedPackageLayout"),
+                                    text(receipt.requestedPackageLayout == .legacy
+                                         ? "export.pc.layoutLegacy" : "export.pc.layoutPosterBoard27")))
+                            .font(.caption)
                         if receipt.sampleAspectRatioAssumed {
                             Text(text("export.pc.assumedPixelAspect")).font(.footnote).foregroundStyle(.secondary)
                         }

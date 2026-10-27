@@ -9,6 +9,8 @@ private struct Request: Decodable {
     let fps: Int
     let count: Int
     let name: String
+    /// Explicit compatibility experiment; omitted requests retain the legacy format.
+    let packageLayout: TendiesPackageLayout?
 }
 
 private enum PackageError: Error { case invalidRequest, invalidFrames, sizeLimit }
@@ -41,7 +43,8 @@ private enum PackageTendiesFrames {
                 screenClass: .iPadPro11M4, displayName: request.name,
                 identifier: Int.random(in: 10_000...99_999),
                 pixelSize: PixelSize(width: request.width, height: request.height),
-                frameCount: request.count, frameRate: Double(request.fps)
+                frameCount: request.count, frameRate: Double(request.fps),
+                packageLayout: request.packageLayout ?? .legacy
             ).validated()
             let expected = Set((0..<request.count).map { "frame-" + descriptor.frameFileName(at: $0) })
             let children = try manager.contentsOfDirectory(atPath: frames.path)

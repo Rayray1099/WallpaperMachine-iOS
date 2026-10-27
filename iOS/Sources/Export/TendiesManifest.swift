@@ -34,6 +34,14 @@ public enum TendiesAnimationEncoding: String, Codable, CaseIterable, Sendable {
     case imageSequence
 }
 
+/// Package contract, independent of frame resolution, rate and animation encoding.
+public enum TendiesPackageLayout: String, Codable, CaseIterable, Sendable {
+    case legacy
+    /// Published logical-space planes and matching PosterKit configuration.
+    /// Opt-in until verified by the target CollectionsPoster consumer.
+    case posterBoard27
+}
+
 public struct TendiesFile: Hashable, Sendable {
     /// Forward-slash path relative to the archive root.
     public let path: String
@@ -53,6 +61,7 @@ public enum TendiesManifestError: Error, Equatable, CustomStringConvertible {
     case invalidPixelSize(PixelSize)
     case invalidScreenClass(TendiesScreenClass)
     case frameCountExceedsArchiveCapacity(Int, Int)
+    case unsupportedAnimationEncoding(TendiesAnimationEncoding, TendiesPackageLayout)
 
     public var description: String {
         switch self {
@@ -70,6 +79,8 @@ public enum TendiesManifestError: Error, Equatable, CustomStringConvertible {
             return "Invalid PosterBoard screen class: \(screenClass.name)."
         case .frameCountExceedsArchiveCapacity(let count, let capacity):
             return "\(count) frames do not fit in a .tendies archive (ZIP32 supports \(capacity) entries including the manifest)."
+        case .unsupportedAnimationEncoding(let encoding, let layout):
+            return "The \(encoding.rawValue) animation encoding is not supported by the \(layout.rawValue) package layout."
         }
     }
 }
@@ -88,6 +99,7 @@ public struct TendiesWallpaperDescriptor: Hashable, Sendable {
     public var frameCount: Int
     public var frameRate: Double
     public var animationEncoding: TendiesAnimationEncoding
+    public var packageLayout: TendiesPackageLayout
     public var descriptorUUID: UUID
     public var createdAt: Date
     public var preferredColorDark: String
@@ -102,6 +114,7 @@ public struct TendiesWallpaperDescriptor: Hashable, Sendable {
         frameCount: Int,
         frameRate: Double,
         animationEncoding: TendiesAnimationEncoding = .contentsKeyframe,
+        packageLayout: TendiesPackageLayout = .legacy,
         descriptorUUID: UUID = UUID(),
         createdAt: Date = Date(),
         preferredColorDark: String = "#000000",
@@ -115,6 +128,7 @@ public struct TendiesWallpaperDescriptor: Hashable, Sendable {
         self.frameCount = frameCount
         self.frameRate = frameRate
         self.animationEncoding = animationEncoding
+        self.packageLayout = packageLayout
         self.descriptorUUID = descriptorUUID
         self.createdAt = createdAt
         self.preferredColorDark = preferredColorDark
@@ -122,9 +136,14 @@ public struct TendiesWallpaperDescriptor: Hashable, Sendable {
     }
 
     /// Name used for the `.wallpaper` bundle, e.g. `MyWallpaper-810w-1080h@2x~ipad.wallpaper`.
-    public var wallpaperFolderName: String { "\(sanitizedName)-\(screenClass.name).wallpaper" }
-    public var backgroundBundleName: String { "\(sanitizedName)_Background-\(screenClass.name).ca" }
-    public var floatingBundleName: String { "\(sanitizedName)_Floating-\(screenClass.name).ca" }
+    public var wallpaperFolderName: String { "\(bundleStem)-\(screenClass.name).wallpaper" }
+    public var backgroundBundleName: String { "\(bundleStem)_Background-\(screenClass.name).ca" }
+    public var floatingBundleName: String { "\(bundleStem)_Floating-\(screenClass.name).ca" }
+    public var foregroundBundleName: String { "\(bundleStem)_Foreground-\(screenClass.name).ca" }
+
+    private var bundleStem: String {
+        packageLayout == .posterBoard27 ? "\(identifier).Clownfish" : sanitizedName
+    }
 
     public var sanitizedName: String { ExportNaming.sanitized(displayName) }
     public var sanitizedFamily: String { ExportNaming.sanitized(family, fallback: "Chip") }
@@ -135,6 +154,7 @@ public struct TendiesWallpaperDescriptor: Hashable, Sendable {
     public var wallpaperFolder: String { "\(contentsFolder)/\(wallpaperFolderName)" }
     public var backgroundFolder: String { "\(wallpaperFolder)/\(backgroundBundleName)" }
     public var floatingFolder: String { "\(wallpaperFolder)/\(floatingBundleName)" }
+    public var foregroundFolder: String { "\(wallpaperFolder)/\(foregroundBundleName)" }
     public var backgroundAssetsFolder: String { "\(backgroundFolder)/assets" }
 
     /// Digits in the generated frame file names. At least five (matching the
@@ -179,9 +199,12 @@ public struct TendiesWallpaperDescriptor: Hashable, Sendable {
         guard screenClass.isValid else {
             throw TendiesManifestError.invalidScreenClass(screenClass)
         }
-        // Every frame is one ZIP entry; the manifest adds eleven more. Enforce the
-        // archive-format limit here (not an arbitrary product cap).
-        let capacity = ZipArchiveWriter.maximumEntryCount - 11
+        guard packageLayout != .posterBoard27 || animationEncoding == .contentsKeyframe else {
+            throw TendiesManifestError.unsupportedAnimationEncoding(animationEncoding, packageLayout)
+        }
+        // Reserve all metadata, including the optional display-name record. The
+        // modern contract adds a third plane and two configuration archives.
+        let capacity = ZipArchiveWriter.maximumEntryCount - (packageLayout == .posterBoard27 ? 17 : 12)
         guard frameCount <= capacity else {
             throw TendiesManifestError.frameCountExceedsArchiveCapacity(frameCount, ZipArchiveWriter.maximumEntryCount)
         }
@@ -197,6 +220,11 @@ public enum TendiesManifest {
         includeDisplayNameMetadata: Bool = true
     ) throws -> [TendiesFile] {
         let descriptor = try descriptor.validated()
+
+        if descriptor.packageLayout == .posterBoard27 {
+            return try TendiesPosterBoard27.metadataFiles(
+                for: descriptor, includeDisplayNameMetadata: includeDisplayNameMetadata)
+        }
 
         var files: [TendiesFile] = [
             TendiesFile(path: "\(descriptor.descriptorFolder)/com.apple.posterkit.role.identifier",
@@ -236,6 +264,9 @@ public enum TendiesManifest {
     // MARK: - Wallpaper.plist
 
     public static func wallpaperPlist(for descriptor: TendiesWallpaperDescriptor) throws -> Data {
+        if descriptor.packageLayout == .posterBoard27 {
+            return try TendiesPosterBoard27.wallpaperPlist(for: descriptor)
+        }
         let defaultAsset: [String: Any] = [
             "backgroundAnimationFileName": descriptor.backgroundBundleName,
             "floatingAnimationFileNameKey": descriptor.floatingBundleName,
@@ -267,6 +298,9 @@ public enum TendiesManifest {
     // MARK: - CAML documents
 
     public static func backgroundCAML(for descriptor: TendiesWallpaperDescriptor) -> String {
+        if descriptor.packageLayout == .posterBoard27 {
+            return TendiesPosterBoard27.backgroundCAML(for: descriptor)
+        }
         switch descriptor.animationEncoding {
         case .contentsKeyframe:
             return contentsKeyframeCAML(for: descriptor)
@@ -397,6 +431,9 @@ public enum TendiesManifest {
     /// Background animation index. Pixel-sized document with the player treating
     /// units as pixels, matching the shipping video template.
     public static func backgroundIndexXML(for descriptor: TendiesWallpaperDescriptor) -> String {
+        if descriptor.packageLayout == .posterBoard27 {
+            return TendiesPosterBoard27.indexXML(for: descriptor, role: "Background")
+        }
         let width = descriptor.pixelSize.width
         let height = descriptor.pixelSize.height
         let duration = Double(descriptor.frameCount) / descriptor.frameRate

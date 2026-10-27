@@ -86,6 +86,10 @@ EXPECTED = {
         "testProviderCancellationAndFinishEndPendingRequestAndIgnoreLateReturn",
     }),
     "TendiesProviderExportTests": frozenset({
+        "testInvalidFirstIndexesRejectAndCannotBeFinished",
+        "testSkippedDuplicateAndOverrunRejectWithoutChangingAccountingOrCompleting",
+        "testMissingFramesCannotFinishAndCancellationRemovesPartialArchive",
+        "testExactSequenceFinishesOnceWithCompleteFrameAccounting",
         "testSyntheticProviderWritesEveryFrameWithCorrectDimensionsAndReferences",
         "testMaximumQualityAppendLeavesCompleteFramesAcrossAutoreleaseBoundaries",
     }),
@@ -98,9 +102,10 @@ TEST_SOURCES = {
     "TendiesProviderExportTests": ROOT / "iOS/Tests/Unit/Export/TendiesProviderExportTests.swift",
 }
 PRODUCTION_SOURCES = tuple("iOS/Sources/" + name for name in (
-    "Models/WallpaperModels.swift", "Export/PCConverterConnection.swift", "Export/PCConverterClient.swift",
+    "Models/WallpaperModels.swift", "Export/PCConverterConnection.swift", "Export/PCConverterOptions.swift", "Export/PCConverterClient.swift",
     "Export/PCConverterView.swift", "Export/ExportDevice.swift", "Export/ExportGeometry.swift",
     "Export/WallpaperExportSettings.swift", "Export/TendiesScreenClass.swift", "Export/TendiesManifest.swift",
+    "Export/TendiesPosterBoard27.swift",
     "Export/KeyedArchiveBuilder.swift", "Export/ZipArchiveWriter.swift",
     "Renderer/SceneSharedAssetsInstaller.swift", "Renderer/SceneSharedAssetsView.swift",
     "Media/MediaFrame.swift", "Export/WallpaperFrameProvider.swift", "Export/MediaCaptureFrameProvider.swift",

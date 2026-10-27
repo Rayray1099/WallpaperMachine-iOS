@@ -4,7 +4,7 @@ Export is separate from foreground playback. `WallpaperExportService` decodes re
 
 ## PC conversion alternative
 
-The user-requested [local PC converter](PC-CONVERTER.md) uses CPU FFmpeg plus this app's unchanged manifest/ZIP generator and has now produced the complete Bocchi **30-second/60-FPS, 1,800-frame** archive. Independent actual-file validation passed all frame decodes/CRCs and sampled source fidelity; Safari completed the 840,285,420-byte download and AirCard imported the named full-quality file. This is a separate conversion architecture, **not a fix for the local AVFoundation reset**. The one-item Flash attempt failed at AirCard's rejected saved pairing keys/fallback tunnel timeout, with no respring or actual system-playback pass. The 10-FPS diagnostic item remained unselected. Web/native pairing, safety and verification details are in the owning converter document.
+The user-requested [local PC converter](PC-CONVERTER.md) uses CPU FFmpeg plus this app's shared manifest/ZIP generator and has now produced the complete Bocchi **30-second/60-FPS, 1,800-frame** archive. Independent actual-file validation passed all frame decodes/CRCs and sampled source fidelity; Safari completed the 840,285,420-byte download and AirCard imported the named full-quality file. This is a separate conversion architecture, **not a fix for the local AVFoundation reset**. The one-item Flash attempt failed at AirCard's rejected saved pairing keys/fallback tunnel timeout, with no respring or actual system-playback pass. The 10-FPS diagnostic item remained unselected. Web/native pairing, safety and verification details are in the owning converter document.
 
 ## References and provenance
 
@@ -12,11 +12,42 @@ The user-requested [local PC converter](PC-CONVERTER.md) uses CPU FFmpeg plus th
 - [Mak5er/AirCard-iOS](https://github.com/Mak5er/AirCard-iOS), specifically `ios-app/TendiesEngine.swift`, imports `.tendies` as ZIP, discovers descriptors and images, and distinguishes container/database payloads. WallpaperMachine exports collections-style assets, not a system database container.
 - The export source includes generated keyed archive metadata and CAML from field values. Compatibility is experimental until an actual exported archive is imported and checked on this user's iPadOS version. Generated metadata is not proof of operating-system acceptance.
 
+### Modern package layout is independent of FPS
+
+`TendiesPackageLayout.posterBoard27` is an **opt-in compatibility experiment**;
+the native exporter and PC server still default to `legacy`. The browser and
+native paired-PC conversion sheet expose this layout as an explicit experimental
+selection. HTTP/Python use `package_layout`; both local converter CLIs accept
+`--package-layout posterBoard27`. The server forwards the selection to the Swift
+frame packager's `packageLayout` request field, and completed-job receipts preserve
+it across restarts. Native download receipts report the requested layout, not an
+independent inspection of the downloaded package. The
+new layout generates all three published logical-point planes, stock-shaped
+numeric bundle/asset names, aligned descriptor/userInfo references and the two
+PosterKit configuration archives together. Empty Floating/Foreground planes are
+transparent; they do not invent depth segmentation. Background `resizeAspectFill`
+fits the original bitmap to the logical canvas without resizing or recompressing
+the JPEG asset. Pixel dimensions, frame count, contents-keyframe encoding and
+duration remain independent of the package layout.
+
+This is **not a lazy decoder or a fix for the measured startup watchdog**. The
+contents-keyframe list still references every frame. `imageSequence` is rejected
+for the new layout rather than claiming an unverified private consumer. Keep a
+separate archive identity when comparing layouts; never rewrite an installed
+descriptor, discard existing wallpapers or infer successful installation from
+an import/thumbnail. Package tests establish structure, not system playback.
+
+The default exporter still generates the legacy `Chip` / `LayeredAnimation` layout with pixel-space CAML. [GoldenNugget's pinned modern-layout converter](https://github.com/GoldenNugget-Team/GoldenNugget-mobile/blob/4e6a595d9fdce5e0a925d572c581f361b6664b54/Nugget/Core/PosterBoardConverter.swift) instead publishes named plane roots, uses logical-screen document units, adds a Foreground plane and rendering/configurable-options archives, and synchronizes Clownfish bundle/plane names with metadata. Its source describes both Depth support and safeguards against renderer traps. These are third-party migration rules, not Apple specifications or proof that every legacy archive fails.
+
+Reducing FPS changes none of those package-layout fields. A loading spinner therefore cannot establish either excessive frame count or a layout fault. The opt-in mode is not a validated system repair. Do not switch only the family, rename one bundle, fabricate configuration metadata, or reset installed descriptors to imitate this migration; actual system validation remains required. Preserve the approved short legacy diagnostic as a separate control, rather than rewriting it into another format.
+
 ## iPad defaults
 
 `ExportDevice` reads connected display native geometry and derives portrait point dimensions and the idiom suffix. It does not reuse iPhone 1290×2796 naming. Both the output pixel size and PosterBoard screen class remain explicit. The target's observed logical geometry is 834×1210 points at2x (1668×2420 portrait pixels). Resolution, duration, FPS, compression, aspect, zoom and offsets are user configurable.
 
-There is no imposed 300-frame restriction. Longer sequence export and actual OS playback duration remain unverified. A safety duration limit is not an OS compatibility claim.
+There is no imposed 300-frame restriction. Longer sequence export and actual OS playback duration remain unverified. A safety duration limit is not an OS compatibility claim. The export and PC-conversion sheets now warn that large image sequences can fail to load even at 30 FPS; [frame-count safeguards and decoded-size estimates](PC-CONVERTER.md#playback-risk-is-separate-from-archive-validity) are not Apple limits or system-playback proof. The PC-conversion UI exposes 30/60 FPS rather than hardcoding 60, without changing full duration, native resolution or JPEG quality.
+
+The supplied iPadOS 27 reports distinguish a CollectionsPoster startup watchdog during JPEG/keyframe preparation from a separate backboardd memory-limit event; see [the diagnosis and its attribution limits](PC-CONVERTER.md#distinguish-startup-watchdogs-from-memory-limit-events). Neither report proves that the later short diagnostic completed installation or failed playback.
 
 ## Timing and limits
 
