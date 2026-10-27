@@ -130,7 +130,7 @@ final class TendiesProviderExportTests: XCTestCase {
         let writer = try TendiesExportWriter(descriptor: descriptor,
             outputURL: directory.appendingPathComponent("\(UUID().uuidString).tendies"),
             compositor: compositor, jpegQuality: 0.9, includesDisplayNameMetadata: true)
-        return (writer, compositor.render(source: image))
+        return (writer, try compositor.render(source: image))
     }
 
     func testSyntheticProviderWritesEveryFrameWithCorrectDimensionsAndReferences() async throws {
