@@ -2,6 +2,15 @@
 
 Implementation, compilation, packaging and physical-device evidence are separate. A green build does not establish playback, export correctness or system wallpaper application.
 
+## 2026-10-27 current build and device checkpoint
+
+This checkpoint supersedes older installed-build and pending-build observations below.
+
+- Full ARM64 Release build [40491396233](https://github.com/Rayray1099/WallpaperMachine-iOS/actions/runs/40491396233) passed for `f798cbd176d2ab28ce7acb49fa8cb2888c53d00d`, including 31 Pixiv Swift cases on macOS/ImageIO. Independent original-IPA checks passed (12,435,834 bytes; SHA-256 `9b472cf23f6ffb3614c15f3531899ad74d17fb350e91b03bf7da9c694d9fc6cf`; 857 safe CRC-verified members; executable/Info.plist match the source-pinned CI manifest).
+- Apple integration run [40491058551](https://github.com/Rayray1099/WallpaperMachine-iOS/actions/runs/40491058551) passed exactly 57 XCTest cases, zero failures/skips, for `036cb4f9d6a74f0d47c434049ba6eb5aa48c5b09`. The later build fixes two Pixiv UI compiler errors outside that test target. These tests do not establish physical Metal or PosterBoard behavior.
+- The verified file-picker test copy was signed/installed through existing LCSign on the authorized iPadOS 27 device. All ten pre-update library items remained by count, with the three observed original item IDs unchanged. Pixiv anonymous rankings, original-image import and source attribution worked on device; adding that test image made eleven items. An observed Pixiv grid overflow has a source fix awaiting rebuild/retest.
+- Acceptance for the main video/scene task requires the exact Steam Workshop export to complete AirCard Flash, appear as an identifiable system wallpaper choice, and apply/display/play. These physical gates are still pending; valid archives and green CI are insufficient.
+
 ## Current PC-conversion checkpoint
 
 - The trusted-LAN [PC converter](PC-CONVERTER.md) creates video archives with CPU FFmpeg and the existing Swift manifest/ZIP writer. Full Bocchi **30 seconds / 60 FPS / 1,800 JPEGs** and Dune **32.933333 seconds / 60 FPS / 1,976 JPEGs** passed independent actual-byte validation, including every CRC/frame decode and five fresh exact CPU-reference comparisons each. Dune's unspecified pixel aspect is explicitly reported as a square-pixel assumption. No quality/FPS reduction or scene-thumbnail substitute was used.
@@ -72,7 +81,7 @@ A source-reviewed follow-up corrects the iOS high-DPI contract (native width/hei
 | Library | Managed additive imports, favorites/collections/playlists/settings, contained ZIP project import and backup rollback | Native XCTest/integration and update preservation; generic `.wmbackup` now rejects rather than silently replacing library; explicit Settings restore retained |
 | iPad UI | Adaptive sidebar/grid/detail/fullscreen/settings, English + Traditional Chinese, physical landscape UI used | Portrait/resizing/accessibility regression; remote Files-picker quirks on locally signed install |
 | Workshop | Real CM/Guard sign-in and one authenticated download/file-verification/library-import completed on iPad | Intermediate byte-progress/cancel/update/recovery and more projects; no bypass or browser-cookie substitution |
-| Pixiv | Native rankings/tag search, filters, private Pixiv sign-in, multipage original-image import, source attribution and library navigation implemented in pending source; see [PIXIV.md](PIXIV.md) | Current Apple build, ImageIO/WebKit/native XCTest and physical browsing/login/download are unverified; desktop queue persistence is not ported |
+| Pixiv | Native rankings/tag search, filters, private Pixiv sign-in, multipage original-image import, source attribution and library navigation; ARM64 build/macOS ImageIO and physical anonymous ranking/original import passed; see [PIXIV.md](PIXIV.md) | Grid overflow follow-up rebuild/retest; authenticated WebKit login and multipage device import unverified; desktop queue persistence is not ported |
 | Audio | Shared opt-in visible/active microphone source wired into web playback | Real permission/audio samples, scene PCM; other-app audio capture unavailable |
 | Export | Physical H.264/tendies completion; real live-web capture and corrected 20-frame returned archive passed 75 content checks | HEVC/sequence/long duration/crop/lifecycle; scene provider; high-FPS capture/full-screen web composition; OS playback |
 | Tendies/AirCard | Actual corrected 20-frame archive CRC/JPEG/CAML/plist checks passed; AirCard imported one Collections descriptor | OS application/private runtime/loop cadence, external ID rewrite and respring recovery not tested; no 300-frame cap |

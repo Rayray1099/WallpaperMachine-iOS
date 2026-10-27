@@ -84,8 +84,8 @@ typecheck Apple frameworks.
 Fixtures and isolated temporary libraries are used; tests do not read account
 cookies, the real Keychain or the installed collection. Windows does not run
 ImageIO, WebKit, SwiftUI, UIKit or native XCTest. Apple-specific image decoding,
-private-webview login and device browsing/download remain separate gates, as
-does the unsigned ARM64 GitHub Actions build. Neither source integration nor
+private-webview login and device browsing/download require their own evidence.
+Neither source integration nor
 an archive test establishes system Home/Lock Screen installation or playback.
 
 An anonymous live smoke test on 2026-10-27 compiled the production service,
@@ -111,9 +111,20 @@ upstream modules failed before XcodeGen/native tests could start:
 | `test_power_benchmark.py` | macOS process API assumptions and Python 3.11 `hashlib.file_digest` unavailable in Python 3.10 |
 | `test_we_reference.py` | macOS `xattr`/`sips` and `time.tzset` unavailable on Windows |
 
-This local checkpoint predates the Apple build. The iOS Build workflow now also
-runs the three Pixiv wrappers on macOS, including the real ImageIO image-project
-branch, before producing the device IPA. Earlier successful Actions runs do not
-validate this patch. Apple build results must be recorded against their actual
-source commit. Native ImageIO XCTest, authenticated Pixiv sessions, device
-interaction and system-wallpaper playback remain separate verification gates.
+The actual ARM64 Release build [40491396233](https://github.com/Rayray1099/WallpaperMachine-iOS/actions/runs/40491396233)
+passed for `f798cbd176d2ab28ce7acb49fa8cb2888c53d00d`, including all 31 Pixiv
+Swift behavior cases on macOS and the real ImageIO image-project branch. Its
+original unsigned IPA is 12,435,834 bytes, SHA-256
+`9b472cf23f6ffb3614c15f3531899ad74d17fb350e91b03bf7da9c694d9fc6cf`.
+Independent checks confirmed all 857 ZIP members, manifest executable/info bytes,
+unsigned ARM64 iOS-device Mach-O and both Pixiv localization resources.
+
+On the authorized iPadOS 27 device, a separately checked copy with the exact
+user-supplied file-picker dylib was signed/installed through existing LCSign.
+The prior ten-item library remained. Anonymous rankings loaded; work `151272665`
+showed its 1000 × 1000 original, downloaded/imported successfully and navigated to
+the image library item with its author and work ID retained (eleven items).
+An observed first-column grid overflow is fixed by explicit column bounds and a
+ratio-sized thumbnail container; that follow-up still requires a fresh Apple
+build and physical layout check. Authenticated sessions, multipage device imports,
+native ImageIO XCTest and system-wallpaper playback remain separate gates.

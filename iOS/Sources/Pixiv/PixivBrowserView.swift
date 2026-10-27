@@ -280,23 +280,36 @@ struct PixivBrowserView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            ScrollView {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 148, maximum: 260), spacing: 12)],
-                    alignment: .center,
-                    spacing: 14
-                ) {
-                    ForEach(store.works) { work in
-                        PixivWorkTile(work: work) { selectedWork = work }
+            GeometryReader { geometry in
+                let columnSpacing: CGFloat = 12
+                let availableWidth = max(0, geometry.size.width)
+                let columnCount = max(1, Int((availableWidth + columnSpacing) / (148 + columnSpacing)))
+                let columnWidth = min(
+                    260,
+                    (availableWidth - CGFloat(columnCount - 1) * columnSpacing) / CGFloat(columnCount))
+
+                ScrollView {
+                    LazyVGrid(
+                        columns: Array(repeating: GridItem(.fixed(columnWidth), spacing: columnSpacing),
+                                       count: columnCount),
+                        alignment: .center,
+                        spacing: 14
+                    ) {
+                        ForEach(store.works) { work in
+                            PixivWorkTile(work: work) { selectedWork = work }
+                                .frame(width: columnWidth, alignment: .leading)
+                                .clipped()
+                                .contentShape(Rectangle())
+                        }
                     }
+                    .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
-            }
-            .overlay(alignment: .top) {
-                if store.isLoading {
-                    ProgressView()
-                        .padding(8)
-                        .background(.regularMaterial, in: Capsule())
+                .overlay(alignment: .top) {
+                    if store.isLoading {
+                        ProgressView()
+                            .padding(8)
+                            .background(.regularMaterial, in: Capsule())
+                    }
                 }
             }
         }
@@ -423,22 +436,24 @@ private struct PixivWorkTile: View {
         VStack(alignment: .leading, spacing: 6) {
             Button(action: onSelect) {
                 VStack(alignment: .leading, spacing: 6) {
-                    ZStack(alignment: .topTrailing) {
-                        PixivThumbnailView(url: work.thumbnailURL)
-                            .frame(maxWidth: .infinity)
-                            .aspectRatio(0.78, contentMode: .fit)
-                            .background(.quaternary)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                        if let rank = work.rank {
-                            Text(verbatim: "#\(rank)")
-                                .font(.caption.weight(.bold).monospacedDigit())
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 4)
-                                .background(.regularMaterial, in: Capsule())
-                                .padding(7)
+                    Color.clear
+                        .aspectRatio(0.78, contentMode: .fit)
+                        // A fill image may exceed its proposal; the base sets the tile size.
+                        .overlay {
+                            PixivThumbnailView(url: work.thumbnailURL)
                         }
-                    }
+                        .background(.quaternary)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(alignment: .topTrailing) {
+                            if let rank = work.rank {
+                                Text(verbatim: "#\(rank)")
+                                    .font(.caption.weight(.bold).monospacedDigit())
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 4)
+                                    .background(.regularMaterial, in: Capsule())
+                                    .padding(7)
+                            }
+                        }
 
                     Text(verbatim: work.title)
                         .font(.subheadline.weight(.semibold))
