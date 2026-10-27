@@ -21,8 +21,11 @@ struct MovieFrameSourceDiagnosticsRegression {
             checks += 1
         }
         func diagnostic(_ error: NSError?, stage: MovieFrameSourceDiagnostics.Stage = .copy,
-                        status: MovieFrameSourceDiagnostics.ReaderStatus? = .failed) -> MovieFrameSourceDiagnostics {
-            MovieFrameSourceDiagnostics(stage: stage, readerStatus: status, error: error)
+                        status: MovieFrameSourceDiagnostics.ReaderStatus? = .failed,
+                        copyStatistics: MovieFrameSourceDiagnostics.CopyStatistics? = nil,
+                        frameContext: MovieFrameSourceDiagnostics.FrameContext? = nil) -> MovieFrameSourceDiagnostics {
+            MovieFrameSourceDiagnostics(stage: stage, readerStatus: status, error: error,
+                                        copyStatistics: copyStatistics, frameContext: frameContext)
         }
 
         let missing = diagnostic(nil, stage: .start, status: nil)
@@ -90,6 +93,30 @@ struct MovieFrameSourceDiagnosticsRegression {
         let duplicateLeaf = NSError(domain: NSCocoaErrorDomain, code: 8)
         let duplicateRoot = NSError(domain: NSCocoaErrorDomain, code: 8, userInfo: [NSUnderlyingErrorKey: duplicateLeaf])
         try require(diagnostic(duplicateRoot).errors.count == 2, "Equal codes on distinct NSError instances are not a cycle")
+
+        var firstCopy = MovieFrameSourceDiagnostics.CopyStatistics()
+        firstCopy.recordAttempt()
+        let immediate = diagnostic(
+            NSError(domain: "AVFoundationErrorDomain", code: -11819),
+            copyStatistics: firstCopy,
+            frameContext: .init(outputFrame: 0, targetValue: 0, targetTimescale: 60))
+        try require(immediate.description ==
+                    "[stage=copy reader=failed errors=AVFoundationErrorDomain:-11819 "
+                    + "copyAttempts=1 successfulSamples=0 outputFrame=0 target=0/60]",
+                    "First-copy failure preserves zero successful samples and output context")
+
+        var afterLookahead = MovieFrameSourceDiagnostics.CopyStatistics()
+        afterLookahead.recordAttempt()
+        afterLookahead.recordSuccess()
+        afterLookahead.recordAttempt()
+        let later = diagnostic(
+            NSError(domain: "AVFoundationErrorDomain", code: -11819),
+            copyStatistics: afterLookahead,
+            frameContext: .init(outputFrame: 120, targetValue: 120, targetTimescale: 60))
+        try require(later.copyStatistics?.successfulSamples == 1 && later.copyStatistics?.attempts == 2,
+                    "Lookahead failure retains successful sample count")
+        try require(later.description.contains("copyAttempts=2 successfulSamples=1 outputFrame=120 target=120/60"),
+                    "Later failure preserves output tick and copy counts")
         print("PASS: privacy-safe decoder stages/status, exact domain allowlist, numeric NSError chains, depth cap and cycles (\(checks) checks)")
         print("Scope: actual Foundation diagnostics only; no AVFoundation decoder, app, simulator or physical-device execution.")
     }

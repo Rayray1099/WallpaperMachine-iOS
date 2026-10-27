@@ -16,7 +16,8 @@ struct WMFullscreenPreview: View {
                     item: item,
                     url: model.playbackURL(for: item),
                     settings: model.library.settings,
-                    microphoneResponse: model.microphoneResponse
+                    microphoneResponse: model.microphoneResponse,
+                    videoPaused: model.exportTarget != nil
                 )
                 .id(item.id)
                 .ignoresSafeArea()

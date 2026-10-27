@@ -38,6 +38,7 @@ struct WMUnavailableSurface: View {
 struct WMVideoWallpaperView: View {
     let url: URL
     let settings: PlaybackSettings
+    var isPaused = false
 
     @State private var failureDetail: String?
     @State private var retryToken = 0
@@ -48,6 +49,7 @@ struct WMVideoWallpaperView: View {
             WMVideoSurface(
                 url: url,
                 settings: settings,
+                isPaused: isPaused,
                 retryToken: retryToken,
                 onFailure: { detail in
                     failureDetail = detail
@@ -71,6 +73,7 @@ struct WMVideoWallpaperView: View {
 private struct WMVideoSurface: UIViewRepresentable {
     let url: URL
     let settings: PlaybackSettings
+    let isPaused: Bool
     let retryToken: Int
     let onFailure: (String) -> Void
 
@@ -80,6 +83,7 @@ private struct WMVideoSurface: UIViewRepresentable {
 
     func makeUIView(context: Context) -> VideoWallpaperView {
         let view = VideoWallpaperView(url: url, settings: settings)
+        view.setPaused(isPaused)
         view.onFailure = { failure in
             context.coordinator.report(failure.localizedDescription)
         }
@@ -89,6 +93,7 @@ private struct WMVideoSurface: UIViewRepresentable {
     func updateUIView(_ uiView: VideoWallpaperView, context: Context) {
         context.coordinator.onFailure = onFailure
         uiView.settings = settings
+        uiView.setPaused(isPaused)
         if context.coordinator.retryToken != retryToken {
             context.coordinator.retryToken = retryToken
             uiView.retry()

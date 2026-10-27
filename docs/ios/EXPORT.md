@@ -55,6 +55,15 @@ Video export uses source timestamps. `MediaCaptureFrameProvider` adapts actual l
 
 Movie reader initialization/start/copy failures retain bounded diagnostics: fixed failure stage and reader status plus allowlisted NSError domains and numeric codes, with at most two underlying errors. Arbitrary domain strings, localized error descriptions, paths, URLs and other userInfo text are not forwarded by those failure paths. This is diagnostic instrumentation, not a decoder or memory fix.
 
+Copy-stage diagnostics also include reader-call attempts, successful source
+samples, the requesting output index and its rational target time. Lookahead may
+fail before that output tick is written; the counters are not completed output
+frames. Movie-to-tendies export now keeps decode, composition and append inside
+one synchronous per-frame autorelease pool. Other providers retain their async
+path. Video previews pause while the export sheet is open and resume on dismissal.
+This is a candidate ownership/concurrency correction, not proof that pooling alone
+fixes total memory growth or the physical device's `-11819` reset.
+
 Current movie export does not mux audio. Standalone WebM input is rejected accurately by the media layer pending connection to the existing native WebM reader. iOS app background suspension can interrupt an export; the operation must report cancellation/failure, not success with an incomplete file.
 
 ## Pending fixed-step native scene export

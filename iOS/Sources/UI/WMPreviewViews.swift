@@ -12,6 +12,7 @@ struct WMPreviewStage: View {
     let url: URL
     let settings: PlaybackSettings
     let microphoneResponse: MicrophoneAudioResponse
+    var videoPaused = false
 
     var body: some View {
         ZStack {
@@ -24,7 +25,7 @@ struct WMPreviewStage: View {
                     properties: item.properties
                 )
             case .video:
-                WMVideoWallpaperView(url: url, settings: settings)
+                WMVideoWallpaperView(url: url, settings: settings, isPaused: videoPaused)
             case .web:
                 WMWebWallpaperView(
                     url: url,

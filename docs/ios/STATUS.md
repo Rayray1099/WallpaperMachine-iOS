@@ -11,6 +11,30 @@ This checkpoint supersedes older installed-build and pending-build observations 
 - The verified file-picker test copy was signed/installed through existing LCSign on the authorized iPadOS 27 device. All ten pre-update library items remained by count, with the three observed original item IDs unchanged. Pixiv anonymous rankings, original-image import and source attribution worked on device; adding that test image made eleven items. An observed Pixiv grid overflow has a source fix awaiting rebuild/retest.
 - Acceptance for the main video/scene task requires the exact Steam Workshop export to complete AirCard Flash, appear as an identifiable system wallpaper choice, and apply/display/play. These physical gates are still pending; valid archives and green CI are insufficient.
 
+### Later device checkpoint: Flash completes, system preview fails
+
+The full Bocchi legacy package completed one Flash through the installed AirCard
+validation build. Its log explicitly reports folder injection into both
+CollectionsPoster extension destinations and the reload-preference writes. The
+previous VPN was Tailscale despite AirCard's green loopback indicator; selecting
+the existing LocalDevVPN made raw RPPairing, RSD and AFC connect. This establishes
+a transport/configuration fault in the earlier attempts, not an archive repair.
+
+After one manual NeoSpring, the system gallery still shows a black Collections
+tile with a persistent activity indicator. The observed gallery item is
+`com.apple.WallpaperKit.CollectionsPoster:57943`; its source identity is not yet
+proven solely by that generic label. It cannot be selected/applied successfully,
+so the system-wallpaper acceptance gate remains failed. Do not repeat Flash or
+respring merely because the installer's success banner is green.
+
+On installed `f798cbd1`, native Bocchi export at 60 FPS / 30 seconds / native
+1668x2420 / JPEG quality 1.0 again failed with a copy-stage AVFoundation `-11819`.
+The candidate source change scopes movie decode, Core Image composition and
+tendies append inside one synchronous frame autorelease pool, pauses the video
+preview while its export sheet is presented, and adds successful-sample/output
+index diagnostics. These changes do not establish the reset's cause or repair
+system playback; full native/device verification is still required.
+
 ## Current PC-conversion checkpoint
 
 - The trusted-LAN [PC converter](PC-CONVERTER.md) creates video archives with CPU FFmpeg and the existing Swift manifest/ZIP writer. Full Bocchi **30 seconds / 60 FPS / 1,800 JPEGs** and Dune **32.933333 seconds / 60 FPS / 1,976 JPEGs** passed independent actual-byte validation, including every CRC/frame decode and five fresh exact CPU-reference comparisons each. Dune's unspecified pixel aspect is explicitly reported as a square-pixel assumption. No quality/FPS reduction or scene-thumbnail substitute was used.

@@ -72,6 +72,7 @@ public final class MovieFrameSource {
     private var current: Sample?
     private var lookahead: Sample?
     private var didPrefetch = false
+    private var copyStatistics = MovieFrameSourceDiagnostics.CopyStatistics()
 
     private init(asset: AVURLAsset, track: AVAssetTrack, info: MovieSourceInfo) {
         self.asset = asset
@@ -148,16 +149,27 @@ public final class MovieFrameSource {
         self.current = nil
         self.lookahead = nil
         self.didPrefetch = false
+        self.copyStatistics = MovieFrameSourceDiagnostics.CopyStatistics()
     }
 
     /// Returns the decoded frame covering `target`, or nil if decoding has ended.
     /// Frames later than the target are held (the last frame is reused) so a
     /// variable-frame-rate source never produces gaps.
     public func frame(at target: CMTime) throws -> CVPixelBuffer? {
-        try ensurePrefetch()
+        try frame(at: target, outputIndex: nil)
+    }
+
+    /// Internal export context for bounded diagnostics. The public one-argument
+    /// API remains the source-reader contract used by standalone callers.
+    func frame(at target: CMTime, outputIndex: Int?) throws -> CVPixelBuffer? {
+        let context = MovieFrameSourceDiagnostics.FrameContext(
+            outputFrame: outputIndex,
+            targetValue: target.value,
+            targetTimescale: target.timescale)
+        try ensurePrefetch(context: context)
         while let next = lookahead, CMTimeCompare(next.time, target) <= 0 {
             current = next
-            lookahead = try readNext()
+            lookahead = try readNext(context: context)
         }
         return current?.pixelBuffer
     }
@@ -169,17 +181,20 @@ public final class MovieFrameSource {
         current = nil
         lookahead = nil
         didPrefetch = false
+        copyStatistics = MovieFrameSourceDiagnostics.CopyStatistics()
     }
 
-    private func ensurePrefetch() throws {
+    private func ensurePrefetch(context: MovieFrameSourceDiagnostics.FrameContext) throws {
         guard !didPrefetch else { return }
         didPrefetch = true
-        current = try readNext()
-        lookahead = try readNext()
+        current = try readNext(context: context)
+        lookahead = try readNext(context: context)
     }
 
     private static func failureDiagnostic(stage: MovieFrameSourceDiagnostics.Stage,
-                                          reader: AVAssetReader) -> String {
+                                          reader: AVAssetReader,
+                                          copyStatistics: MovieFrameSourceDiagnostics.CopyStatistics? = nil,
+                                          frameContext: MovieFrameSourceDiagnostics.FrameContext? = nil) -> String {
         let status: MovieFrameSourceDiagnostics.ReaderStatus
         switch reader.status {
         case .unknown: status = .unknown
@@ -190,18 +205,24 @@ public final class MovieFrameSource {
         @unknown default: status = .unknown
         }
         return MovieFrameSourceDiagnostics(stage: stage, readerStatus: status,
-                                           error: reader.error as NSError?).description
+                                           error: reader.error as NSError?,
+                                           copyStatistics: copyStatistics,
+                                           frameContext: frameContext).description
     }
 
-    private func readNext() throws -> Sample? {
+    private func readNext(context: MovieFrameSourceDiagnostics.FrameContext) throws -> Sample? {
         guard let output else { return nil }
+        copyStatistics.recordAttempt()
         guard let sampleBuffer = output.copyNextSampleBuffer() else {
             if let reader, reader.status == .failed {
                 throw MovieFrameSourceError.readerFailed(
-                    Self.failureDiagnostic(stage: .copy, reader: reader))
+                    Self.failureDiagnostic(stage: .copy, reader: reader,
+                                           copyStatistics: copyStatistics,
+                                           frameContext: context))
             }
             return nil
         }
+        copyStatistics.recordSuccess()
         let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         return Sample(sampleBuffer: sampleBuffer, time: time)
     }

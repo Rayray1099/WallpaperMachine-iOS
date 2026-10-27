@@ -265,11 +265,34 @@ public final class WallpaperExportService {
 
     // MARK: - Frame loop
 
+    /// The video-to-tendies path is deliberately synchronous for one complete
+    /// output tick. No await may split ownership of the decoded sample, Core
+    /// Image graph or JPEG input across the pool boundary.
+    private func renderMovieTendiesFrame(
+        movie: MovieFrameSource,
+        compositor: FrameCompositor,
+        writer: TendiesExportWriter,
+        index: Int,
+        frameCount: Int,
+        time: CMTime
+    ) throws {
+        try autoreleasepool {
+            guard let buffer = try movie.frame(at: time, outputIndex: index) else {
+                throw WallpaperExportError.sourceEndedEarly(index, frameCount)
+            }
+            let image = try compositor.render(
+                source: buffer,
+                preferredTransform: movie.info.preferredTransform)
+            try writer.append(image, frameIndex: index)
+        }
+    }
+
     private func renderFrames(
         source: PreparedSource,
         timeline: ExportTimeline,
         compositor: FrameCompositor,
         progress: (@Sendable (WallpaperExportProgress) -> Void)?,
+        movieTendiesWriter: TendiesExportWriter? = nil,
         consume: (Int, CIImage) async throws -> Void
     ) async throws {
         if case .movie(let movie) = source {
@@ -283,22 +306,28 @@ public final class WallpaperExportService {
         for index in 0..<timeline.frameCount {
             try Task.checkCancellation()
             let time = CMTime(value: CMTimeValue(index), timescale: CMTimeScale(timeline.frameRate))
-            let image: CIImage
-            switch source {
-            case .movie(let movie):
-                guard let buffer = try movie.frame(at: time) else {
-                    throw WallpaperExportError.sourceEndedEarly(index, timeline.frameCount)
+            if case .movie(let movie) = source, let writer = movieTendiesWriter {
+                try renderMovieTendiesFrame(movie: movie, compositor: compositor,
+                                            writer: writer, index: index,
+                                            frameCount: timeline.frameCount, time: time)
+            } else {
+                let image: CIImage
+                switch source {
+                case .movie(let movie):
+                    guard let buffer = try movie.frame(at: time, outputIndex: index) else {
+                        throw WallpaperExportError.sourceEndedEarly(index, timeline.frameCount)
+                    }
+                    image = try compositor.render(source: buffer, preferredTransform: movie.info.preferredTransform)
+                case .provider(let provider, _):
+                    guard let buffer = try await provider.frame(at: time) else {
+                        throw WallpaperExportError.frameProviderReturnedNoFrame(index)
+                    }
+                    image = try compositor.render(source: buffer)
+                case .still(let cgImage):
+                    image = try compositor.render(source: cgImage)
                 }
-                image = try compositor.render(source: buffer, preferredTransform: movie.info.preferredTransform)
-            case .provider(let provider, _):
-                guard let buffer = try await provider.frame(at: time) else {
-                    throw WallpaperExportError.frameProviderReturnedNoFrame(index)
-                }
-                image = try compositor.render(source: buffer)
-            case .still(let cgImage):
-                image = try compositor.render(source: cgImage)
+                try await consume(index, image)
             }
-            try await consume(index, image)
             report(.encoding, completed: index + 1, total: timeline.frameCount, progress: progress)
         }
     }
@@ -472,7 +501,8 @@ public final class WallpaperExportService {
         var notes = notes
         notes.append(String(localized: "iPad screen class: ") + descriptor.screenClass.name)
         do {
-            try await renderFrames(source: source, timeline: timeline, compositor: compositor, progress: progress) { index, image in
+            try await renderFrames(source: source, timeline: timeline, compositor: compositor,
+                                   progress: progress, movieTendiesWriter: writer) { index, image in
                 try writer.append(image, frameIndex: index)
             }
             report(.packaging, completed: timeline.frameCount, total: timeline.frameCount, progress: progress)
