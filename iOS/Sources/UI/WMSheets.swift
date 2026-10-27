@@ -59,6 +59,19 @@ struct WMWorkshopSheet: View {
     }
 }
 
+// MARK: - Pixiv
+
+struct WMPixivSheet: View {
+    @ObservedObject var model: WMAppModel
+
+    var body: some View {
+        WMSheetContainer(titleKey: "pixiv.title", onClose: { model.isPixivPresented = false }) {
+            PixivBrowserView(store: model.pixiv, onShowInLibrary: model.showPixivItemInLibrary)
+                .accessibilityIdentifier("wm.pixiv")
+        }
+    }
+}
+
 // MARK: - Export
 
 struct WMExportSheet: View {

@@ -31,6 +31,23 @@ public enum WallpaperKind: String, Codable, CaseIterable {
     case scene, video, web, image
 }
 
+/// Attribution retained with the managed image and included in library backups.
+/// These keys match the upstream Pixiv project.json metadata.
+public struct PixivAttribution: Codable, Hashable, Sendable {
+    public let id: String
+    public let page: Int
+    public let pages: Int
+    public let author: String
+    public let authorId: String
+    public let url: URL
+    public let original: URL
+    public let file: String
+    public let width: Int
+    public let height: Int
+
+    public var libraryID: String { "pixiv-\(id)-p\(page)" }
+}
+
 public struct WallpaperProperty: Codable, Hashable {
     public var label: String
     public var type: String
@@ -54,17 +71,19 @@ public struct WallpaperItem: Identifiable, Codable, Hashable {
     public var entryFile: String
     public var previewFile: String?
     public var workshopID: String?
+    public var pixiv: PixivAttribution?
     public var isFavorite: Bool
     public var collections: [String]
     public var properties: [String: WallpaperProperty]
     public var addedAt: Date
 
     public init(id: UUID = UUID(), title: String, kind: WallpaperKind, relativePath: String,
-                entryFile: String, previewFile: String? = nil, workshopID: String? = nil,
+                entryFile: String, previewFile: String? = nil, workshopID: String? = nil, pixiv: PixivAttribution? = nil,
                 isFavorite: Bool = false, collections: [String] = [],
                 properties: [String: WallpaperProperty] = [:], addedAt: Date = Date()) {
         self.id = id; self.title = title; self.kind = kind; self.relativePath = relativePath
         self.entryFile = entryFile; self.previewFile = previewFile; self.workshopID = workshopID
+        self.pixiv = pixiv
         self.isFavorite = isFavorite; self.collections = collections
         self.properties = properties; self.addedAt = addedAt
     }

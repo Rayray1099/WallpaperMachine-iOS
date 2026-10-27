@@ -48,15 +48,22 @@ public final class LibraryStore: ObservableObject {
         return try? AssetPath.resolve(preview, inside: url(for: item))
     }
     public func importURL(_ url: URL) async {
-        guard !isImporting else { errorMessage = "An import is already in progress."; return }
+        do { try await importURLReporting(url) }
+        catch { errorMessage = error.localizedDescription }
+    }
+    /// Download owners must see an import failure before reporting a completed download.
+    public func importURLReporting(_ url: URL) async throws {
+        guard !isImporting else {
+            throw NSError(domain: "WallpaperMachine.Library", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: NSLocalizedString("library.import.busy", comment: "Import already running"),
+            ])
+        }
         isImporting = true; defer { isImporting = false }
         let root = rootURL; let original = snapshot()
-        do {
-            let manifest = try await Task.detached(priority: .userInitiated) {
-                try LibraryRepository(rootURL: root).importWallpaper(from: url, into: original)
-            }.value
-            adopt(manifest)
-        } catch { errorMessage = error.localizedDescription }
+        let manifest = try await Task.detached(priority: .userInitiated) {
+            try LibraryRepository(rootURL: root).importWallpaper(from: url, into: original)
+        }.value
+        adopt(manifest)
     }
     public func toggleFavorite(_ item: WallpaperItem) {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }

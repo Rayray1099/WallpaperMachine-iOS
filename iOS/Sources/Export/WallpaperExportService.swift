@@ -204,7 +204,8 @@ public final class WallpaperExportService {
             let movie = try await MovieFrameSource.open(url: url)
             return .movie(movie)
         case .image:
-            let url = try sourceFileURL(sourceURL: sourceURL, entryFile: item.entryFile)
+            // Pixiv may use a bounded display image for playback; export the retained original.
+            let url = try sourceFileURL(sourceURL: sourceURL, entryFile: item.pixiv?.file ?? item.entryFile)
             guard let image = UIImage(contentsOfFile: url.path)?.cgImage else {
                 throw WallpaperExportError.imageUnreadable(url.lastPathComponent)
             }

@@ -65,6 +65,7 @@ live under `testing/`.
 | [ios/STATUS.md](ios/STATUS.md) | Feature-parity checklist with source/build/on-device verification kept separate |
 | [ios/EXPORT.md](ios/EXPORT.md) | Real-frame export, iPad geometry, experimental tendies and AirCard safety boundary |
 | [ios/PC-CONVERTER.md](ios/PC-CONVERTER.md) | Trusted-LAN PC conversion, iPad web/native pairing, output limits and actual verification |
+| [ios/PIXIV.md](ios/PIXIV.md) | Native Pixiv rankings/search, private sign-in, original-page downloads and managed-library attribution |
 | [ios/AIRCARD-VALIDATION.md](ios/AIRCARD-VALIDATION.md) | Pinned installer compatibility patch, real folder-payload tests and unsigned validation-only IPA |
 | [ios/QA.md](ios/QA.md) | Executable iCTRL/offline regression harness and physical-device evidence policy |
 

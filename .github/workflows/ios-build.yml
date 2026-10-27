@@ -107,6 +107,9 @@ jobs:
             -o "${RUNNER_TEMP}/wm-ios-movie-diagnostics-tests"
           "${RUNNER_TEMP}/wm-ios-movie-diagnostics-tests" | tee "${IOS_ARTIFACTS}/movie-diagnostics-tests.log"
 
+      - name: Test Pixiv service, ImageIO import and download state on macOS
+        run: python3 -B -m unittest discover -s scripts/tests -p 'test_ios_pixiv*.py' -v
+
       - name: Build renderer and unsigned app
         run: python3 scripts/ios/build.py --artifacts-dir "${IOS_ARTIFACTS}"
 

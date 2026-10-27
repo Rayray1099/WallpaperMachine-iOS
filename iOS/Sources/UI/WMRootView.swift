@@ -33,6 +33,9 @@ struct WMRootView: View {
         .sheet(isPresented: $model.isWorkshopPresented) {
             WMWorkshopSheet(model: model)
         }
+        .sheet(isPresented: $model.isPixivPresented) {
+            WMPixivSheet(model: model)
+        }
         .sheet(item: $model.exportTarget) { target in
             WMExportSheet(model: model, target: target)
         }
@@ -129,7 +132,7 @@ struct WMCompactLibraryView: View {
     ]
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $model.compactNavigationPath) {
             content
                 .navigationTitle(title)
                 .toolbar {
@@ -253,6 +256,13 @@ struct WMCompactLibraryView: View {
                 Label("workshop.title", systemImage: "square.grid.2x2")
             }
             .accessibilityIdentifier("wm.workshop")
+
+            Button {
+                model.isPixivPresented = true
+            } label: {
+                Label("pixiv.title", systemImage: "photo.on.rectangle.angled")
+            }
+            .accessibilityIdentifier("wm.pixiv")
 
             Button {
                 model.beginCreatingCollection()

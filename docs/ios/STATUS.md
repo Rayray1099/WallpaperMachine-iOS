@@ -72,12 +72,17 @@ A source-reviewed follow-up corrects the iOS high-DPI contract (native width/hei
 | Library | Managed additive imports, favorites/collections/playlists/settings, contained ZIP project import and backup rollback | Native XCTest/integration and update preservation; generic `.wmbackup` now rejects rather than silently replacing library; explicit Settings restore retained |
 | iPad UI | Adaptive sidebar/grid/detail/fullscreen/settings, English + Traditional Chinese, physical landscape UI used | Portrait/resizing/accessibility regression; remote Files-picker quirks on locally signed install |
 | Workshop | Real CM/Guard sign-in and one authenticated download/file-verification/library-import completed on iPad | Intermediate byte-progress/cancel/update/recovery and more projects; no bypass or browser-cookie substitution |
+| Pixiv | Native rankings/tag search, filters, private Pixiv sign-in, multipage original-image import, source attribution and library navigation implemented in pending source; see [PIXIV.md](PIXIV.md) | Current Apple build, ImageIO/WebKit/native XCTest and physical browsing/login/download are unverified; desktop queue persistence is not ported |
 | Audio | Shared opt-in visible/active microphone source wired into web playback | Real permission/audio samples, scene PCM; other-app audio capture unavailable |
 | Export | Physical H.264/tendies completion; real live-web capture and corrected 20-frame returned archive passed 75 content checks | HEVC/sequence/long duration/crop/lifecycle; scene provider; high-FPS capture/full-screen web composition; OS playback |
 | Tendies/AirCard | Actual corrected 20-frame archive CRC/JPEG/CAML/plist checks passed; AirCard imported one Collections descriptor | OS application/private runtime/loop cadence, external ID rewrite and respring recovery not tested; no 300-frame cap |
 | Build/legal | Actual new full Release native/Swift package + independent original IPA checks passed | Simulator renderer/test dispatch absent; local user-dylib test package is separate, not stock signed release |
 
 ## Local regression checks and limits
+
+- Current pending Tendies/Pixiv integration (2026-10-27): all 14 iOS Python modules passed (220 reported tests); the three Pixiv wrappers executed 31 Swift behavior cases. A live anonymous original-image download/import/reload passed with byte-identical original preservation. All 135 iOS Swift source/test files syntax-parsed, production Pixiv core/store typechecked in Swift 5 mode with warnings as errors, and both iOS catalogs have 384 unique matching keys/placeholders. The final routine gate passed 34 of 39 Python modules, failed in five unchanged upstream portability modules on Windows/Python 3.10 and stopped before XcodeGen/native execution; one optional pinned AirCard source class was skipped. [Full scope and gaps](PIXIV.md#verification-boundaries). Apple build results must be checked against their actual source commit.
+
+Earlier checkpoints below describe their own trees and do not replace the current gate:
 
 - `python -m unittest discover -s scripts/ios/qa/tests -p 'test_*.py'`: **122 run, 119 passed, 3 skipped**, no failures/errors. Skips require pinned source-license input archives absent from this checkout; actual CI notice generation passed separately.
 - `python scripts/ios/build.py --check`: passed, static configuration only.

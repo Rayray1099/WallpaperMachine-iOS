@@ -34,6 +34,7 @@ final class WMAppModel: ObservableObject {
     let microphone = WMMicrophoneController()
     let microphoneResponse = MicrophoneAudioResponse()
     let workshopDownloads: WorkshopContentDownloadStore
+    let pixiv: PixivStore
 
     @Published var sidebarSelection: WMSidebarSelection = .all
     @Published var selectedItemID: WallpaperItem.ID?
@@ -43,6 +44,8 @@ final class WMAppModel: ObservableObject {
     @Published var isImporterPresented = false
     @Published var isSettingsPresented = false
     @Published var isWorkshopPresented = false
+    @Published var isPixivPresented = false
+    @Published var compactNavigationPath: [UUID] = []
     @Published var isPlaylistEditorPresented = false
     @Published var isFullscreenPresented = false
     @Published var isCreatingCollection = false
@@ -65,10 +68,12 @@ final class WMAppModel: ObservableObject {
     init(library: LibraryStore) {
         self.library = library
         self.workshopDownloads = WorkshopContentDownloadStore(library: library)
+        self.pixiv = PixivStore(library: library)
         // The app model is the single observable the views watch, so changes the
         // store publishes (imports, external edits) reach SwiftUI as well.
         libraryObserver = library.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
+            self?.pixiv.libraryDidChange()
         }
         microphoneObserver = microphone.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
@@ -120,6 +125,8 @@ final class WMAppModel: ObservableObject {
             item.title.localizedCaseInsensitiveContains(query)
                 || item.collections.contains { $0.localizedCaseInsensitiveContains(query) }
                 || (item.workshopID?.localizedCaseInsensitiveContains(query) ?? false)
+                || (item.pixiv?.author.localizedCaseInsensitiveContains(query) ?? false)
+                || (item.pixiv?.id.localizedCaseInsensitiveContains(query) ?? false)
         }
     }
 
@@ -166,6 +173,14 @@ final class WMAppModel: ObservableObject {
 
     func selectItem(_ item: WallpaperItem) {
         selectedItemID = item.id
+    }
+
+    func showPixivItemInLibrary(_ item: WallpaperItem) {
+        selectScope(.all)
+        searchText = ""
+        selectItem(item)
+        compactNavigationPath = [item.id]
+        isPixivPresented = false
     }
 
     func requestSearchFocus() {

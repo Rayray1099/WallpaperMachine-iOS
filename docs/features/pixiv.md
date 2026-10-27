@@ -1,5 +1,8 @@
 # pixiv illustrations
 
+The desktop behavior is documented below. The native iPhone/iPad port and its
+verification limits are documented in [Pixiv on iOS](../ios/PIXIV.md).
+
 The **pixiv** page browses pixiv's illustration rankings and tag search and saves
 any page of a work to the library as a still wallpaper that applies like any
 other. Browsing needs no account; signing in to pixiv adds the works pixiv shows

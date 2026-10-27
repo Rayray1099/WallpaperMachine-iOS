@@ -9,6 +9,36 @@ level.
 These are historical results about the trees they were taken on. They are not
 evidence about the current tree and must never be cited as such.
 
+## 2026-10-25 — Final iOS microphone-source build artifact
+
+- Actions40164217807 source9ff8f083: Release native engine+Swift app compile, source notices, unsigned IPA packaging and structural validation PASS.
+- Downloaded final IPA5777278bytes SHA256 eec01ca1a75f1868105e130735eb3135ee4df87730d22572ee2b4712f30e6dc4; independent Windows hash/CRC/IPA checks PASS, arm64 device iOS18 floor, unsigned, en+zh-Hant.
+- Linked executable includes actual C++ owe_scene_wallpaper_new and Rust rs_shader_compile_program;74 bundled legal files checked. Not prerecorded scene-video substitution.
+- Shared microphone-to-web lifecycle source is included in compiled artifact. Pure gate six-case harness passed; microphone permission/capture runtime is not physically verified.
+- Physical signing/install/testing deferred by user taking the iPad away. No further device RPCs after that instruction; no app FPS/memory/scene appearance claims.
+
+## 2026-10-25 — Native iOS ARM64 build and unsigned IPA validation
+
+- Preserved existing implementation and upstream history; committed/pushed ios/main to authorized private repository, no release tag/version bump.
+- Real macOS Actions40164005806 (b2f8810b), Xcode26.3/iPhoneOS SDK26.2: native Rust wm-shader + C++ engine, Swift app, legal source texts, IPA package and validation PASS.
+- Renderer archive contains639 arm64 iOS Mach-O objects; downloaded IPA also contains linked owe_scene_wallpaper_new and rs_shader_compile_program symbols.
+- Actual downloaded unsigned IPA: 5756147 bytes; SHA256 d77c905186e095f546f5e0a0f5fe1381abf1ebf4c7420fdfa6373e507523fa46; ZIP CRC, structure, unsigned arm64 iOS, English/zh-Hant and74 license files independently checked on Windows.
+- python -m unittest discover -s scripts/ios/qa/tests -p test_*.py:119 PASS in continuation checkout; three source-input smoke cases skip without local downloaded inputs.
+- Shared microphone web-feed eligibility: Foundation-only helper typecheck and compiled standalone six-case execution PASS; native XCTest still deferred.
+- Upstream python scripts/test.py fails Windows-oriented prerequisites; scripts/check_renderer.py blocked by missing Homebrew; no macOS GPU/unit regression pass claimed.
+- Physical iPad testing explicitly deferred by user. No LAN transfer/signing/installation/app FPS or memory measurements performed.
+
+## 2026-10-25 — iOS native host and build-contract checkpoint
+
+- Preserved existing port and upstream history; reconciled Rust wm-shader + C++ C ABI renderer outputs and unsigned device build contracts.
+- python scripts/ios/build.py --check: PASS, static only; no IPA compiled by this check.
+- python -m unittest discover -s scripts/ios/qa/tests -p test_*.py: PASS, 100 offline tests; synthetic IPA fixtures are not a built app.
+- Windows swiftc portable model/repository, Workshop Foundation and export-core typechecks: PASS; ZIPFoundation and Apple SDK branches not exercised.
+- swiftc -frontend -parse all iOS source/test Swift: PASS, syntax only.
+- python scripts/test.py: FAIL on Windows in upstream macOS-oriented scripts (paths, encoding, Python API version and unavailable macOS utilities); native macOS gate not reached.
+- Native simulator XCTest/UI tests explicitly deferred pending simulator-specific renderer build; device C ABI archive cannot serve simulator.
+- No successful Xcode build, IPA, installation or physical-app verification at this checkpoint.
+
 ## 2026-10-24 — Keep each visited desktop's wallpaper loaded and paused
 
 Follow-up to PR #77: a display with a different wallpaper for each desktop keeps the wallpapers of visited desktops parked (renderer, bridge, web and video hosts) instead of reloading them on every desktop change; memory pressure and Stop (free memory) let them go.

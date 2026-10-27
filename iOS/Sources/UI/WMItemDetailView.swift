@@ -169,6 +169,15 @@ private struct WMDetailsSection: View {
                 if let workshopID = item.workshopID, !workshopID.isEmpty {
                     detailRow(label: Text("inspector.workshopID"), value: Text(verbatim: workshopID))
                 }
+                if let source = item.pixiv, PixivWork.isValidID(source.id),
+                   let url = URL(string: "https://www.pixiv.net/artworks/" + source.id) {
+                    detailRow(label: Text("pixiv.artist"), value: Text(verbatim: source.author))
+                    detailRow(label: Text("pixiv.workID"), value: Text(verbatim: source.id))
+                    Link(destination: url) {
+                        Label("pixiv.openArtwork", systemImage: "arrow.up.right.square")
+                    }
+                    .accessibilityIdentifier("wm.pixiv.source")
+                }
             }
         }
     }

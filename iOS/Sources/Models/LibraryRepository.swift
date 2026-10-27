@@ -59,7 +59,15 @@ public final class LibraryRepository {
         let project = try projectRoot(in: staged)
         var item = try readProject(at: project, originalName: source.deletingPathExtension().lastPathComponent)
         var manifest = original
-        if let id = item.workshopID, let existing = manifest.items.first(where: { $0.workshopID == id }) {
+        let existing: WallpaperItem?
+        if let attribution = item.pixiv {
+            existing = manifest.items.first { $0.pixiv?.libraryID == attribution.libraryID }
+        } else if let id = item.workshopID {
+            existing = manifest.items.first { $0.workshopID == id }
+        } else {
+            existing = nil
+        }
+        if let existing {
             item.id = existing.id; item.isFavorite = existing.isFavorite; item.collections = existing.collections
             for (key, property) in existing.properties where item.properties[key] != nil { item.properties[key]?.value = property.value }
             item.addedAt = existing.addedAt
@@ -151,7 +159,24 @@ public final class LibraryRepository {
             let entry = try AssetPath.resolve(item.entryFile, inside: folder)
             guard fm.fileExists(atPath: entry.path) else { throw LibraryError.missingEntry }
             if let preview = item.previewFile { _ = try AssetPath.resolve(preview, inside: folder) }
+            if let source = item.pixiv { try validatePixiv(source, in: folder) }
         }
+    }
+
+    private func validatePixiv(_ value: PixivAttribution, in folder: URL) throws {
+        guard !value.id.isEmpty, value.id.count <= 12, value.id.utf8.contains(where: { $0 != 48 }),
+              value.id.allSatisfy({ $0.isASCII && $0.isNumber }),
+              value.page >= 0, value.page < value.pages,
+              value.width > 0, value.height > 0,
+              value.url.scheme == "https", value.url.host == "www.pixiv.net",
+              value.url.user == nil, value.url.password == nil, value.url.port == nil,
+              value.url.path == "/artworks/" + value.id,
+              value.original.scheme == "https", value.original.host == "i.pximg.net",
+              value.original.user == nil, value.original.password == nil, value.original.port == nil
+        else { throw LibraryError.invalidPath("pixiv") }
+        let originalURL = try AssetPath.resolve(value.file, inside: folder)
+        guard try originalURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true
+        else { throw LibraryError.missingEntry }
     }
 
     private func inspectTree(_ root: URL) throws {
@@ -246,8 +271,18 @@ public final class LibraryRepository {
         var preview = object["preview"] as? String
         if let name = preview { _ = try AssetPath.resolve(name, inside: folder) }
         if preview == nil { preview = ["preview.jpg", "preview.png", "preview.gif"].first { fm.fileExists(atPath: folder.appendingPathComponent($0).path) } }
+        var attribution: PixivAttribution?
+        if let metadata = object["pixiv"] {
+            guard let metadata = metadata as? [String: Any], JSONSerialization.isValidJSONObject(metadata)
+            else { throw LibraryError.invalidPath("pixiv") }
+            let data = try JSONSerialization.data(withJSONObject: metadata)
+            let value = try JSONDecoder().decode(PixivAttribution.self, from: data)
+            try validatePixiv(value, in: folder)
+            attribution = value
+        }
         return WallpaperItem(title: object["title"] as? String ?? originalName, kind: kind, relativePath: "pending", entryFile: entry,
-                             previewFile: preview, workshopID: object["workshopid"] as? String ?? numericID, properties: properties)
+                             previewFile: preview, workshopID: object["workshopid"] as? String ?? numericID,
+                             pixiv: attribution, properties: properties)
     }
     private func guessKind(_ name: String) -> WallpaperKind {
         let ext = (name as NSString).pathExtension.lowercased()
