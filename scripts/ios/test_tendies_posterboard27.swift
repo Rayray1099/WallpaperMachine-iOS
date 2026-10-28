@@ -30,6 +30,7 @@ private enum WMArchiveProbe {
     }
 }
 
+@objc(WMKeyedArchiveProxy)
 private class WMKeyedArchiveProxy: NSObject, NSCoding {
     required init?(coder: NSCoder) {
         super.init()
@@ -38,6 +39,7 @@ private class WMKeyedArchiveProxy: NSObject, NSCoding {
     func encode(with coder: NSCoder) {}
 }
 
+@objc(WMPosterSuggestionMetadataProxy)
 private final class WMPosterSuggestionMetadataProxy: WMKeyedArchiveProxy {
     required init?(coder: NSCoder) {
         let gallery = coder.decodeObject(forKey: "suggestedGalleryItem")
@@ -52,6 +54,7 @@ private final class WMPosterSuggestionMetadataProxy: WMKeyedArchiveProxy {
     }
 }
 
+@objc(WMFaceGalleryItemProxy)
 private final class WMFaceGalleryItemProxy: WMKeyedArchiveProxy {
     required init?(coder: NSCoder) {
         let descriptorIdentifier = coder.decodeObject(forKey: "descriptorIdentifier") as? String
@@ -83,6 +86,7 @@ private final class WMFaceGalleryItemProxy: WMKeyedArchiveProxy {
     }
 }
 
+@objc(WMColorProxy)
 private final class WMColorProxy: WMKeyedArchiveProxy {
     required init?(coder: NSCoder) {
         let values: [String: WMDecodedValue] = [
