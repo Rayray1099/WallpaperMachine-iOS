@@ -298,7 +298,7 @@ class IOSConverterHTTPTests(unittest.TestCase):
         self.assertEqual(status, 200)
         with zipfile.ZipFile(io.BytesIO(body)) as archive:
             self.assertIsNone(archive.testzip())
-            self.assertEqual(len(archive.infolist()), 20)
+            self.assertEqual(len(archive.infolist()), 21)
             self.assertEqual(len([name for name in archive.namelist() if name.endswith(".jpg")]), 3)
             main = next(name for name in archive.namelist() if name.endswith("_Background-834w-1210h@2x~ipad.ca/main.caml"))
             self.assertTrue(archive.read(main).lstrip().startswith(b"<?xml"))

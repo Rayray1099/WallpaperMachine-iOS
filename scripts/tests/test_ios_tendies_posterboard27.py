@@ -26,6 +26,14 @@ SCREEN = "834w-1210h@2x~ipad"
 OTHER = "com.apple.posterkit.provider.contents.otherMetadata.plist"
 CONFIG = ".com.apple.posterkit.provider.contents.configurableOptions.plist"
 RENDERING = "com.apple.posterkit.provider.instance.renderingConfiguration.plist"
+SUGGESTION = "com.apple.posterkit.provider.identifierURL.suggestionMetadata.plist"
+BINARY_MODERN_SUFFIXES = (
+    "providerInfo.plist",
+    "otherMetadata.plist",
+    "renderingConfiguration.plist",
+    "configurableOptions.plist",
+    "suggestionMetadata.plist",
+)
 
 # Captured from the pre-layout production implementation with the fixed descriptor
 # in the Swift runner. Exact text bytes are stable; Foundation dictionary order is
@@ -91,6 +99,31 @@ def decode_archive(data):
 
 
 class TendiesPosterBoard27Tests(unittest.TestCase):
+    def assert_binary_uid_graph(self, data):
+        self.assertTrue(data.startswith(b"bplist00"), "suggestion archive is not binary")
+        archive = plistlib.loads(data)
+        self.assertEqual(archive.get("$archiver"), "NSKeyedArchiver")
+        self.assertEqual(archive.get("$version"), 100000)
+        objects = archive.get("$objects")
+        self.assertIsInstance(objects, list)
+        self.assertTrue(objects and objects[0] == "$null")
+
+        def visit(value):
+            if isinstance(value, plistlib.UID):
+                self.assertGreaterEqual(value.data, 0)
+                self.assertLess(value.data, len(objects))
+                return
+            if isinstance(value, dict):
+                self.assertNotEqual(set(value), {"CF$UID"},
+                                    "binary archive contains an XML CF$UID dictionary")
+                for child in value.values():
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+
+        visit(archive)
+
     @classmethod
     def setUpClass(cls):
         compiler = shutil.which("swiftc")
@@ -162,7 +195,7 @@ class TendiesPosterBoard27Tests(unittest.TestCase):
                 self.assertEqual(decode_archive(members[f"{contents}/{OTHER}"]), {
                     "_class": "PRPosterMetadata", "displayNameLocalizationKey": "Synthetic Geometry"})
 
-    def test_modern_stock_names_and_aligned_identity_not_descriptor_uuid(self):
+    def test_modern_stock_names_and_independent_gallery_identity(self):
         for name, row in self.fixtures.items():
             if row["layout"] != "posterBoard27":
                 continue
@@ -196,8 +229,28 @@ class TendiesPosterBoard27Tests(unittest.TestCase):
                 self.assertEqual(plistlib.loads(members[f"{contents}/com.apple.posterkit.provider.contents.userInfo"]), {
                     "wallpaperRepresentingFileName": wallpaper_name,
                     "wallpaperRepresentingIdentifier": str(row["identifier"]), "posterEnvironmentOverrides": b"{}"})
+                for suffix in BINARY_MODERN_SUFFIXES:
+                    matches = [path for path in members if path.endswith(suffix)]
+                    if suffix == "otherMetadata.plist" and not any(
+                            path.endswith("otherMetadata.plist") for path in members):
+                        continue
+                    self.assertEqual(len(matches), 1, f"missing modern keyed archive: {suffix}")
+                    self.assert_binary_uid_graph(members[matches[0]])
                 self.assertEqual(decode_archive(members[f"{contents}/{OTHER}"])["displayNameLocalizationKey"],
                                  row["displayName"])
+                suggestion_data = members[f"{descriptor}/{SUGGESTION}"]
+                self.assert_binary_uid_graph(suggestion_data)
+                suggestion = decode_archive(suggestion_data)
+                self.assertEqual(suggestion["_class"], "PRPosterSuggestionMetadata")
+                gallery = suggestion["suggestedGalleryItem"]
+                self.assertEqual(gallery["_class"], "ATXFaceGalleryItem")
+                self.assertEqual(gallery["descriptorIdentifier"], f"{row['identifier']}.DYNAMIC")
+                self.assertEqual(gallery["displayNameLocalizationKey"], "Collections")
+                self.assertEqual(gallery["localizedDisplayName"], row["displayName"])
+                self.assertEqual(gallery["extensionBundleIdentifier"],
+                                 "com.apple.WallpaperKit.CollectionsPoster")
+                self.assertEqual(gallery["identifier"], row["galleryUUID"])
+                self.assertNotEqual(gallery["identifier"], row["uuid"])
         self.assertEqual(Path(self.fixtures["uuid"]["wallpaperFolder"]).name,
                          Path(self.fixtures["modern"]["wallpaperFolder"]).name)
 
@@ -312,7 +365,7 @@ class TendiesPosterBoard27Tests(unittest.TestCase):
         self.assertIs(options["preferredRenderingConfiguration"]["depthEffectDisabled"], False)
 
     def test_dynamic_metadata_member_counts_and_optional_record(self):
-        for name, count in (("legacy", 12), ("modern", 17)):
+        for name, count in (("legacy", 12), ("modern", 18)):
             with self.subTest(layout=name):
                 full, minimal = self.members(name), self.members(name + "-no-display")
                 self.assertEqual(len(full), count)
@@ -329,7 +382,7 @@ class TendiesPosterBoard27Tests(unittest.TestCase):
                         self.assertEqual(full[path], minimal[path])
 
     def test_real_zip_preserves_every_opaque_source_frame_byte(self):
-        for name, metadata_count in (("legacy", 12), ("modern", 17)):
+        for name, metadata_count in (("legacy", 12), ("modern", 18)):
             with self.subTest(layout=name), zipfile.ZipFile(self.output / (name + ".tendies")) as archive:
                 row = self.fixtures[name]
                 self.assertIsNone(archive.testzip())

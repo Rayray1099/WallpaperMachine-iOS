@@ -5,11 +5,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 QA_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(QA_DIR))
@@ -91,17 +90,24 @@ class LoadOfficialClient(unittest.TestCase):
             client = official_client.load_official_client()
         self.assertEqual(client.path, path.resolve())
 
-    @unittest.skipUnless(sys.platform == "win32", "the os.uname defect is Windows-specific")
-    def test_official_cli_is_broken_on_windows_which_is_why_we_import(self):
-        try:
-            client = official_client.load_official_client()
-        except official_client.OfficialClientError as error:
-            self.skipTest(str(error))
-        completed = subprocess.run([sys.executable, str(client.path), "--help"],
-                                   capture_output=True, text=True, timeout=30)
-        combined = completed.stdout + completed.stderr
-        self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("uname", combined)
+    def test_import_and_call_never_shell_out_to_the_cli(self):
+        path = self.directory / "fake_client.py"
+        path.write_text(FAKE_CLIENT, encoding="utf-8")
+        response = {"result": {"message": "ok"}}
+        with patch("subprocess.run", side_effect=AssertionError("QA must import the client")):
+            client = official_client.load_official_client(path)
+            client.module.call = Mock(return_value=response)
+            self.assertIs(client.call("host", "tap", {"ref": "target"}, timeout=45), response)
+        client.module.call.assert_called_once_with("host", "tap", {"ref": "target"}, timeout=45)
+
+    def test_call_propagates_timeout_without_retry(self):
+        path = self.directory / "fake_client.py"
+        path.write_text(FAKE_CLIENT, encoding="utf-8")
+        client = official_client.load_official_client(path)
+        client.module.call = Mock(side_effect=TimeoutError("outcome unknown"))
+        with self.assertRaises(TimeoutError):
+            client.call("host", "tap", {"ref": "target"})
+        client.module.call.assert_called_once_with("host", "tap", {"ref": "target"}, timeout=60.0)
 
 
 if __name__ == "__main__":

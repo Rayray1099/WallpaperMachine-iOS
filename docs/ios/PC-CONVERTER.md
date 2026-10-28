@@ -41,6 +41,16 @@ The native app's paired-PC integration uses the same private URL and protocol. I
 
 The browser and native paired-PC sheet also expose **Legacy (default)** and **PosterBoard 27 (experimental)**. Both capture the selected layout with the request and send `package_layout=posterBoard27` when opted in. Python's `convert(..., package_layout="posterBoard27")` and both local CLIs' `--package-layout posterBoard27` select the same path; the server passes `packageLayout` to the Swift frame packager. Job status and completed-job receipts retain the selected layout, including restoration after restart. The native receipt labels its value as requested: download integrity checks do not independently establish the archive's layout or system compatibility. Omitted layout fields remain legacy-compatible.
 
+The current source also carries a keyed-archive format repair candidate for the
+modern package: production provider-info, optional display-name, suggestion and
+modern configuration archives are intended to be binary property lists with true
+NSKeyedArchiver UID references. The suggestion record follows the stock
+Collections split between `displayNameLocalizationKey = Collections`, the
+user-facing localized title, the numeric `.DYNAMIC` descriptor identifier and a
+separate gallery identifier. This repairs serialization/metadata shape only;
+it is not evidence that missing suggestion metadata caused a picker failure or
+that PosterBoard will accept, display, animate or loop the archive.
+
 ## Output and limits
 
 - Native and browser UI default: **full duration, explicitly shown 30 FPS, 1668×2420, aspect Fit, silent JPEG sequence**, screen class `834w-1210h@2x~ipad`. The native client carries the selected 30/60 FPS through upload and reports the requested rate with the saved file. The existing headless CLI/API default remains 60 FPS for compatibility; pass `--fps 30` or `fps=30` explicitly. Existing archives are never rewritten.
@@ -101,6 +111,7 @@ The installed native scene build separately captures the actual renderer's owned
 ## Verification and actual observations
 
 - Current pending Tendies/Pixiv integration (2026-10-27): the final `IOS_LOCAL_CONVERTER_INTEGRATION=1 python -B scripts/test.py` run passed all 14 iOS Python modules (220 reported tests, including real tiny Swift/FFmpeg conversions and the three wrappers executing 31 Pixiv Swift cases). The optional pinned AirCard source class was skipped. The overall gate returned exit 1 in five unchanged upstream Windows/macOS portability modules, before XcodeGen/native execution; [details and Apple verification boundaries](PIXIV.md#verification-boundaries). The 38-input/57-case native integration manifest was checked in dry-run mode only. This patch has no new Apple build or device-playback result.
+- The focused Tendies regression is `python3 -B -m unittest discover -s scripts/tests -p 'test_ios_tendies_posterboard27.py' -v`. The Windows portable run passed **9 tests**; the same command is now a macOS step before the iOS ARM64 build, where the Darwin-only `NSKeyedUnarchiver` proxy traversal executes. The checks establish binary UID encoding, keyed-archive graph shape and identity relationships; they do not establish picker visibility or PosterBoard playback.
 - Earlier converter baseline: `IOS_LOCAL_CONVERTER_INTEGRATION=1 python -B -m unittest scripts.tests.test_ios_local_converter scripts.tests.test_ios_converter_server scripts.tests.test_ios_shared_assets_pack`: **83 passed, no skips** (16 engine including two actual optimized Swift/FFmpeg tiny conversions; 36 HTTP; 31 owned-assets packaging). Transport tests include exact range reconstruction, authentication, cancellation, restoration and strict persisted aspect-assumption disclosure.
 - Actual Apple [39-case integration gate](https://github.com/Rayray1099/WallpaperMachine-iOS/actions/runs/40214634291): **39 passed, zero failures/skips**, consisting of 7 PC-client, 12 resource-installer and 20 CPU scene-mailbox/timing tests. Separate [UIKit host gate](https://github.com/Rayray1099/WallpaperMachine-iOS/actions/runs/40213825556): **21 passed**, using the explicit native-operation recorder—not a real GPU renderer.
 - Actual authorized Bocchi source: **30 seconds, 60/1 FPS, 1,800 frames**. The PC produced **840,285,420 bytes**, SHA-256 `207baa7bfcbecbaa2ac59f0671742fefb32844458f801b7403cc2d5be3eb8ef2`.

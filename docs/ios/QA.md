@@ -58,11 +58,17 @@ curl -o ../.local/ictrl/schema.json   http://<host>:8200/schema
 
 The harness imports that file (`scripts/ios/qa/official_client.py`) and calls
 `call(host, method, params, timeout)`. It never reimplements pairing, X25519,
-HMAC envelopes or the request keystream, and never shells out to the CLI: on
-Windows `pair`'s `--name` default is `os.uname().nodename`, so every CLI
-invocation raises `AttributeError` while argparse is built. The module-level call
-path is functional. Override the locations with `WM_QA_ICTRL_CLIENT` /
-`WM_QA_ICTRL_SCHEMA` or `--client` / `--schema`.
+HMAC envelopes or the request keystream. QA intentionally does not shell out to
+the CLI because the module-level call must remain inside the journaled session,
+where timeout outcomes can be resolved without resending a possibly completed
+action.
+
+The locally cached official client inspected on Windows uses `platform.node()`
+for the `pair` subcommand's default `--name`; the earlier `os.uname()` failure
+does not apply to that copy. Other downloaded client versions can differ. Offline
+QA loads the client, runs adapter tests, and records `cli_used: false`; it does
+not establish pairing, an RPC, or an iOS/device pass. Override the locations
+with `WM_QA_ICTRL_CLIENT` / `WM_QA_ICTRL_SCHEMA` or `--client` / `--schema`.
 
 ## Live device run (Lead-granted lane)
 

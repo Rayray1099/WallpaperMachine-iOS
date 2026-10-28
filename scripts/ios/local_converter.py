@@ -40,7 +40,7 @@ MAX_JOB_BYTES = 3_800_000_000
 MAX_SECONDS = 600
 MAX_RUNTIME_SECONDS = 1800
 MIN_FREE_BYTES = 128 * 1024**2
-PACKAGE_LAYOUT_METADATA_COUNTS = {"legacy": 12, "posterBoard27": 17}
+PACKAGE_LAYOUT_METADATA_COUNTS = {"legacy": 12, "posterBoard27": 18}
 PACKAGE_LAYOUTS = frozenset(PACKAGE_LAYOUT_METADATA_COUNTS)
 CORE_FILES = tuple(ROOT / "iOS/Sources/Export" / (name + ".swift") for name in (
     "ExportGeometry", "WallpaperExportSettings", "TendiesScreenClass",

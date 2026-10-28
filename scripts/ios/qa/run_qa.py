@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """Run the WallpaperMachine iOS QA checks: offline regression and a gated live pass.
 
-Offline (default): loads the downloaded official iCTRL client without using its
-broken-on-Windows CLI, validates the captured schema, runs the QA Python tests,
-checks the UI accessibility-ID contract statically, syntax-parses the iOS Swift
-tests when a Swift compiler is available, and exercises Build Agent's IPA
-validator with synthetic fixtures when it exists. It never touches the device.
+Offline (default): loads the downloaded official iCTRL client through the QA
+module adapter, validates the captured schema, runs the QA Python tests, checks
+the UI accessibility-ID contract statically, syntax-parses the iOS Swift tests
+when a Swift compiler is available, and exercises Build Agent's IPA validator
+with synthetic fixtures when it exists. It sends no device RPC; it does make a
+TCP reachability probe.
+
+QA does not shell out to the client CLI: live module-level calls stay inside the
+journaled session so timeout outcomes can be resolved without resending an
+action. Offline QA loads the client and runs adapter tests; it does not establish
+pairing, an RPC, or an iOS/device pass.
 
 Live (``--device --lane <lease>``): requires the Lead's explicit device-lane
 lease; captures the app window multiple times, proves advancing animation from

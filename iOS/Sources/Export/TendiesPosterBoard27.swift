@@ -13,6 +13,12 @@ enum TendiesPosterBoard27 {
                         data: Data(String(descriptor.identifier).utf8)),
             TendiesFile(path: "\(descriptor.descriptorFolder)/providerInfo.plist",
                         data: try TendiesArchives.providerInfo(date: descriptor.createdAt)),
+            TendiesFile(path: "\(descriptor.descriptorFolder)/com.apple.posterkit.provider.identifierURL.suggestionMetadata.plist",
+                        data: try TendiesArchives.suggestionMetadata(
+                            displayName: descriptor.sanitizedName,
+                            identifier: descriptor.identifier,
+                            galleryIdentifier: descriptor.suggestionGalleryUUID.uuidString.uppercased(),
+                            date: descriptor.createdAt)),
             TendiesFile(path: "\(descriptor.contentsFolder)/com.apple.posterkit.provider.contents.userInfo",
                         data: try TendiesArchives.userInfo(wallpaperFileName: descriptor.wallpaperFolderName,
                                                           identifier: descriptor.identifier)),
@@ -133,7 +139,7 @@ enum TendiesPosterBoard27 {
     private static func renderingConfiguration() throws -> Data {
         var archive = KeyedArchiveBuilder()
         let root = renderingObject(in: &archive)
-        return try archive.data(root: root)
+        return try archive.data(root: root, format: .binary)
     }
 
     private static func configurableOptions() throws -> Data {
@@ -159,6 +165,6 @@ enum TendiesPosterBoard27 {
                                 "preferredRenderingConfiguration": rendering,
                                 "preferredTimeFontConfigurations": emptyArray,
                                 "preferredTitleColors": emptyArray] as [String: Any])
-        return try archive.data(root: root)
+        return try archive.data(root: root, format: .binary)
     }
 }

@@ -233,7 +233,7 @@ class LocalConverterTests(unittest.TestCase):
             converter._validate(output, 3, 64, 96, 60, threading.Event(),
                                 converter.time.monotonic() + 20, "posterBoard27")
             with converter.zipfile.ZipFile(output) as archive:
-                self.assertEqual(len(archive.infolist()), 20)
+                self.assertEqual(len(archive.infolist()), 21)
                 self.assertIsNone(archive.testzip())
                 names = set(archive.namelist())
                 self.assertEqual(len([name for name in names if name.endswith(".jpg")]), 3)

@@ -37,6 +37,26 @@ separate archive identity when comparing layouts; never rewrite an installed
 descriptor, discard existing wallpapers or infer successful installation from
 an import/thumbnail. Package tests establish structure, not system playback.
 
+### Current keyed-archive format repair candidate
+
+The current uncommitted export repair keeps the explicit XML compatibility path
+in `KeyedArchiveBuilder`, while production `providerInfo.plist`, optional
+`otherMetadata.plist`, and Collections suggestion metadata are emitted as binary
+keyed archives. The binary path round-trips the XML `CF$UID` spelling through
+Foundation before binary serialization so references become real plist UID
+objects. The suggestion graph keeps the stock `Collections`
+`displayNameLocalizationKey`, the user title in `localizedDisplayName`, the
+numeric `<id>.DYNAMIC` descriptor identifier, and an independent gallery UUID.
+
+This is a **format-correctness candidate**, not an established picker or playback
+repair. The scoped fixture checks validate binary headers, UID bounds, class/object
+graphs and identity relationships. The macOS iOS-build workflow runs the same
+test before the full ARM64 build so its Darwin-only `NSKeyedUnarchiver` proxy
+checks execute. A passing archive/decoder check still does not establish private
+PosterBoard acceptance, picker visibility, animation, looping, orientation or
+lock/unlock behavior. Missing suggestion metadata remains a device-side
+hypothesis rather than a proven root cause.
+
 The default exporter still generates the legacy `Chip` / `LayeredAnimation` layout with pixel-space CAML. [GoldenNugget's pinned modern-layout converter](https://github.com/GoldenNugget-Team/GoldenNugget-mobile/blob/4e6a595d9fdce5e0a925d572c581f361b6664b54/Nugget/Core/PosterBoardConverter.swift) instead publishes named plane roots, uses logical-screen document units, adds a Foreground plane and rendering/configurable-options archives, and synchronizes Clownfish bundle/plane names with metadata. Its source describes both Depth support and safeguards against renderer traps. These are third-party migration rules, not Apple specifications or proof that every legacy archive fails.
 
 Reducing FPS changes none of those package-layout fields. A loading spinner therefore cannot establish either excessive frame count or a layout fault. The opt-in mode is not a validated system repair. Do not switch only the family, rename one bundle, fabricate configuration metadata, or reset installed descriptors to imitate this migration; actual system validation remains required. Preserve the approved short legacy diagnostic as a separate control, rather than rewriting it into another format.

@@ -101,6 +101,9 @@ public struct TendiesWallpaperDescriptor: Hashable, Sendable {
     public var animationEncoding: TendiesAnimationEncoding
     public var packageLayout: TendiesPackageLayout
     public var descriptorUUID: UUID
+    /// Independent gallery-item identity used by the PosterBoard suggestion record.
+    /// It must not be reused as the descriptor folder UUID.
+    public var suggestionGalleryUUID: UUID
     public var createdAt: Date
     public var preferredColorDark: String
     public var preferredColorDefault: String
@@ -116,6 +119,7 @@ public struct TendiesWallpaperDescriptor: Hashable, Sendable {
         animationEncoding: TendiesAnimationEncoding = .contentsKeyframe,
         packageLayout: TendiesPackageLayout = .legacy,
         descriptorUUID: UUID = UUID(),
+        suggestionGalleryUUID: UUID = UUID(),
         createdAt: Date = Date(),
         preferredColorDark: String = "#000000",
         preferredColorDefault: String = "#FFFFFF"
@@ -130,6 +134,7 @@ public struct TendiesWallpaperDescriptor: Hashable, Sendable {
         self.animationEncoding = animationEncoding
         self.packageLayout = packageLayout
         self.descriptorUUID = descriptorUUID
+        self.suggestionGalleryUUID = suggestionGalleryUUID
         self.createdAt = createdAt
         self.preferredColorDark = preferredColorDark
         self.preferredColorDefault = preferredColorDefault
@@ -204,7 +209,7 @@ public struct TendiesWallpaperDescriptor: Hashable, Sendable {
         }
         // Reserve all metadata, including the optional display-name record. The
         // modern contract adds a third plane and two configuration archives.
-        let capacity = ZipArchiveWriter.maximumEntryCount - (packageLayout == .posterBoard27 ? 17 : 12)
+        let capacity = ZipArchiveWriter.maximumEntryCount - (packageLayout == .posterBoard27 ? 18 : 12)
         guard frameCount <= capacity else {
             throw TendiesManifestError.frameCountExceedsArchiveCapacity(frameCount, ZipArchiveWriter.maximumEntryCount)
         }

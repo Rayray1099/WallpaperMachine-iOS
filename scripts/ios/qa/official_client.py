@@ -2,11 +2,10 @@
 """Load the downloaded official iCTRL client as a module, never reimplement its crypto.
 
 The official `ictrl_rpc.py` is downloaded from the device
-(`GET /skill/clients/python`). Its command-line interface is unusable on Windows:
-`pair`'s `--name` default is `os.uname().nodename`, evaluated while argparse is
-built, so *every* CLI invocation raises `AttributeError` before any request is
-made. Importing the module and calling `call(host, method, params, timeout)` is
-functional there, so this harness imports it and never shells out to the CLI.
+(`GET /skill/clients/python`). The QA harness imports it and calls its protocol
+function directly so every device request stays inside the journaled session
+and the harness can enforce its no-retry policy. The standalone CLI remains a
+useful operator tool, but it is intentionally not used by QA.
 
 The client owns pairing and the encrypted envelope (X25519 for LAN pairing,
 HMAC-SHA256 envelopes for requests). This module only locates it and checks that
